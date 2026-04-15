@@ -1,0 +1,707 @@
+package com.slicc.plugin.parser;
+
+import com.intellij.lang.ASTNode;
+import com.intellij.lang.LightPsiParser;
+import com.intellij.lang.PsiBuilder;
+import com.intellij.lang.PsiBuilder.Marker;
+import com.intellij.lang.PsiParser;
+import com.intellij.psi.tree.IElementType;
+import com.slicc.plugin.lexer.SliccTokenTypes;
+import com.slicc.plugin.psi.SliccTypes;
+import org.jetbrains.annotations.NotNull;
+
+/**
+ * Recursive-descent parser for SLICC.
+ *
+ * Grammar summary (informal):
+ *   file          ::= topDecl*
+ *   topDecl       ::= machineDecl | structureDecl | enumerationDecl
+ *                   | externalTypeDecl | funcDecl | includeDecl | stateDecl
+ *   machineDecl   ::= 'machine' '(' id ':' id ',' string ')' ':' memberList '{' machineBody '}'
+ *   structureDecl ::= 'structure' '(' id attrList ')' '{' fieldList '}'
+ *   enumerationDecl ::= 'enumeration' '(' id attrList ')' '{' enumMemberList '}'
+ *   actionDecl    ::= 'action' '(' id ',' string attrList ')' '{' stmt* '}'
+ *   transitionDecl::= 'transition' '(' stateList ',' eventList [',' stateList] ')' [resourceList] '{' actionCallList '}'
+ *   funcDecl      ::= type id '(' paramList ')' '{' stmt* '}'
+ *   in_portDecl   ::= 'in_port' '(' id ',' type ',' id attrList ')' '{' stmt* '}'
+ *   out_portDecl  ::= 'out_port' '(' id ',' type ',' id ')' ';'
+ */
+public class SliccParser implements PsiParser, LightPsiParser {
+
+    @NotNull
+    @Override
+    public ASTNode parse(@NotNull IElementType root, @NotNull PsiBuilder builder) {
+        parseLight(root, builder);
+        return builder.getTreeBuilt();
+    }
+
+    @Override
+    public void parseLight(IElementType root, PsiBuilder builder) {
+        builder.setDebugMode(false);
+        Marker file = builder.mark();
+        parseFile(builder);
+        file.done(root);
+    }
+
+    // ......... File ................................................................................................................................................................................................
+
+    private void parseFile(PsiBuilder b) {
+        while (!b.eof()) {
+            if (!parseTopLevelDecl(b)) {
+                b.advanceLexer(); // recover
+            }
+        }
+    }
+
+    private boolean parseTopLevelDecl(PsiBuilder b) {
+        IElementType tt = b.getTokenType();
+        if (tt == SliccTokenTypes.KW_MACHINE)       return parseMachineDecl(b);
+        if (tt == SliccTokenTypes.KW_STRUCTURE)     return parseStructureDecl(b);
+        if (tt == SliccTokenTypes.KW_ENUMERATION)   return parseEnumerationDecl(b);
+        if (tt == SliccTokenTypes.KW_EXTERNAL_TYPE) return parseExternalTypeDecl(b);
+        if (tt == SliccTokenTypes.KW_INCLUDE)       return parseIncludeDecl(b);
+        if (tt == SliccTokenTypes.KW_STATE_DECLARATION) return parseStateDecl(b);
+        if (tt == SliccTokenTypes.KW_GLOBAL)        return parseStructureDecl(b);
+        // free-standing function
+        if (isFunctionStart(b))                     return parseFunctionDecl(b);
+        return false;
+    }
+
+    // ......... machine(...) : ? { ? } ..............................................................................................................................
+
+    private boolean parseMachineDecl(PsiBuilder b) {
+        Marker m = b.mark();
+        b.advanceLexer(); // 'machine'
+        expectToken(b, SliccTokenTypes.OP_LPAREN, "'('");
+        parseMachineHeader(b);
+        expectToken(b, SliccTokenTypes.OP_RPAREN, "')'");
+        // optional ':' member-var list
+        if (b.getTokenType() == SliccTokenTypes.OP_COLON) {
+            b.advanceLexer();
+            parseMachineParams(b);
+        }
+        if (b.getTokenType() == SliccTokenTypes.OP_LBRACE) {
+            parseMachineBody(b);
+        }
+        m.done(SliccTypes.MACHINE_DECL);
+        return true;
+    }
+
+    private void parseMachineHeader(PsiBuilder b) {
+        // MachineType:Name , "desc"
+        parseTypeOrIdent(b); // MachineType
+        if (b.getTokenType() == SliccTokenTypes.OP_COLON) {
+            b.advanceLexer();
+            parseIdent(b); // Name
+        }
+        if (b.getTokenType() == SliccTokenTypes.OP_COMMA) {
+            b.advanceLexer();
+            if (b.getTokenType() == SliccTokenTypes.STRING_LITERAL) b.advanceLexer();
+        }
+    }
+
+    private void parseMachineParams(PsiBuilder b) {
+        // member variable declarations ended by '{'
+        while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_LBRACE) {
+            if (!parseFieldOrVar(b)) b.advanceLexer();
+        }
+    }
+
+    private void parseMachineBody(PsiBuilder b) {
+        expectToken(b, SliccTokenTypes.OP_LBRACE, "'{'");
+        while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_RBRACE) {
+            if (!parseMachineMember(b)) b.advanceLexer();
+        }
+        expectToken(b, SliccTokenTypes.OP_RBRACE, "'}'");
+    }
+
+    private boolean parseMachineMember(PsiBuilder b) {
+        IElementType tt = b.getTokenType();
+        if (tt == SliccTokenTypes.KW_STATE_DECLARATION) return parseStateDecl(b);
+        if (tt == SliccTokenTypes.KW_ENUMERATION)       return parseEnumerationDecl(b);
+        if (tt == SliccTokenTypes.KW_STRUCTURE)         return parseStructureDecl(b);
+        if (tt == SliccTokenTypes.KW_IN_PORT)           return parseInPortDecl(b);
+        if (tt == SliccTokenTypes.KW_OUT_PORT)          return parseOutPortDecl(b);
+        if (tt == SliccTokenTypes.KW_ACTION)            return parseActionDecl(b);
+        if (tt == SliccTokenTypes.KW_TRANSITION)        return parseTransitionDecl(b);
+        if (tt == SliccTokenTypes.KW_INCLUDE)           return parseIncludeDecl(b);
+        if (isFunctionStart(b))                         return parseFunctionDecl(b);
+        if (isFieldStart(b))                            return parseFieldOrVar(b);
+        return false;
+    }
+
+    // ......... structure(...) { ? } ..........................................................................................................................................
+
+    private boolean parseStructureDecl(PsiBuilder b) {
+        Marker m = b.mark();
+        b.advanceLexer(); // 'structure' or 'global'
+        expectToken(b, SliccTokenTypes.OP_LPAREN, "'('");
+        parseIdent(b);
+        parseAttrList(b);
+        expectToken(b, SliccTokenTypes.OP_RPAREN, "')'");
+        if (b.getTokenType() == SliccTokenTypes.OP_LBRACE) {
+            b.advanceLexer();
+            while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_RBRACE) {
+                if (!parseStructureMember(b)) b.advanceLexer();
+            }
+            expectToken(b, SliccTokenTypes.OP_RBRACE, "'}'");
+        }
+        m.done(SliccTypes.STRUCTURE_DECL);
+        return true;
+    }
+
+    private boolean parseStructureMember(PsiBuilder b) {
+        // method declaration or field
+        if (isFunctionStart(b)) return parseFunctionDecl(b);
+        return parseFieldOrVar(b);
+    }
+
+    // ......... enumeration(...) { ? } ....................................................................................................................................
+
+    private boolean parseEnumerationDecl(PsiBuilder b) {
+        Marker m = b.mark();
+        b.advanceLexer(); // 'enumeration'
+        expectToken(b, SliccTokenTypes.OP_LPAREN, "'('");
+        parseIdent(b);
+        parseAttrList(b);
+        expectToken(b, SliccTokenTypes.OP_RPAREN, "')'");
+        expectToken(b, SliccTokenTypes.OP_LBRACE, "'{'");
+        while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_RBRACE) {
+            parseEnumMember(b);
+        }
+        expectToken(b, SliccTokenTypes.OP_RBRACE, "'}'");
+        m.done(SliccTypes.ENUMERATION_DECL);
+        return true;
+    }
+
+    private void parseEnumMember(PsiBuilder b) {
+        Marker m = b.mark();
+        parseIdent(b);
+        parseAttrList(b);
+        if (b.getTokenType() == SliccTokenTypes.OP_SEMICOLON) b.advanceLexer();
+        m.done(SliccTypes.ENUM_MEMBER);
+    }
+
+    // ......... state_declaration(...) { ? } ..................................................................................................................
+
+    private boolean parseStateDecl(PsiBuilder b) {
+        Marker m = b.mark();
+        b.advanceLexer(); // 'state_declaration'
+        expectToken(b, SliccTokenTypes.OP_LPAREN, "'('");
+        parseIdent(b);
+        parseAttrList(b);
+        expectToken(b, SliccTokenTypes.OP_RPAREN, "')'");
+        expectToken(b, SliccTokenTypes.OP_LBRACE, "'{'");
+        while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_RBRACE) {
+            parseEnumMember(b);
+        }
+        expectToken(b, SliccTokenTypes.OP_RBRACE, "'}'");
+        m.done(SliccTypes.STATE_DECL);
+        return true;
+    }
+
+    // ......... external_type(...) { ? } ..............................................................................................................................
+
+    private boolean parseExternalTypeDecl(PsiBuilder b) {
+        Marker m = b.mark();
+        b.advanceLexer(); // 'external_type'
+        expectToken(b, SliccTokenTypes.OP_LPAREN, "'('");
+        parseIdent(b);
+        parseAttrList(b);
+        expectToken(b, SliccTokenTypes.OP_RPAREN, "')'");
+        // optional method body
+        if (b.getTokenType() == SliccTokenTypes.OP_LBRACE) {
+            b.advanceLexer();
+            while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_RBRACE) {
+                if (!parseFunctionDecl(b)) b.advanceLexer();
+            }
+            expectToken(b, SliccTokenTypes.OP_RBRACE, "'}'");
+        }
+        m.done(SliccTypes.EXTERNAL_TYPE_DECL);
+        return true;
+    }
+
+    // ......... include "file" ; ............................................................................................................................................................
+
+    private boolean parseIncludeDecl(PsiBuilder b) {
+        Marker m = b.mark();
+        b.advanceLexer(); // 'include'
+        if (b.getTokenType() == SliccTokenTypes.STRING_LITERAL) b.advanceLexer();
+        if (b.getTokenType() == SliccTokenTypes.OP_SEMICOLON)   b.advanceLexer();
+        m.done(SliccTypes.INCLUDE_DECL);
+        return true;
+    }
+
+    // ......... action(Name, "shortname", ...) { stmt* } ....................................................................................
+
+    private boolean parseActionDecl(PsiBuilder b) {
+        Marker m = b.mark();
+        b.advanceLexer(); // 'action'
+        expectToken(b, SliccTokenTypes.OP_LPAREN, "'('");
+        parseIdent(b); // action name
+        if (b.getTokenType() == SliccTokenTypes.OP_COMMA) {
+            b.advanceLexer();
+            if (b.getTokenType() == SliccTokenTypes.STRING_LITERAL) b.advanceLexer();
+        }
+        parseAttrList(b);
+        expectToken(b, SliccTokenTypes.OP_RPAREN, "')'");
+        parseBlock(b);
+        m.done(SliccTypes.ACTION_DECL);
+        return true;
+    }
+
+    // ......... transition(states, events [, nextState]) [resources] { actions } ............
+
+    private boolean parseTransitionDecl(PsiBuilder b) {
+        Marker m = b.mark();
+        b.advanceLexer(); // 'transition'
+        expectToken(b, SliccTokenTypes.OP_LPAREN, "'('");
+        parseTransitionStateList(b);
+        expectToken(b, SliccTokenTypes.OP_COMMA, "','");
+        parseTransitionEventList(b);
+        // optional next state
+        if (b.getTokenType() == SliccTokenTypes.OP_COMMA) {
+            b.advanceLexer();
+            parseTransitionStateList(b);
+        }
+        expectToken(b, SliccTokenTypes.OP_RPAREN, "')'");
+        // optional resource list {TagArrayRead, ...}
+        if (b.getTokenType() == SliccTokenTypes.OP_LBRACE) {
+            // peek ahead: if first token after { is an identifier followed by } or , 
+            // and no statements, treat as resource list
+            parseResourceListOrBlock(b, m);
+            return true;
+        }
+        m.done(SliccTypes.TRANSITION_DECL);
+        return true;
+    }
+
+    private void parseResourceListOrBlock(PsiBuilder b, Marker transitionMarker) {
+        // Check if this brace block is a resource list (identifiers only, no statements)
+        // We use a heuristic: consume it as block, mark as transition
+        Marker resMarker = b.mark();
+        b.advanceLexer(); // '{'
+        // collect resource list items
+        boolean isResourceList = true;
+        int depth = 1;
+        // lookahead: check whether contents look like action calls or resource identifiers
+        // Resource list = { Ident [, Ident]* } with no semicolons or := inside
+        // We use simple heuristic: if there's a ';' or ':=' it's a block, else resource list
+        PsiBuilder.Marker lookahead = b.mark();
+        while (!b.eof() && depth > 0) {
+            IElementType t = b.getTokenType();
+            if (t == SliccTokenTypes.OP_LBRACE) depth++;
+            if (t == SliccTokenTypes.OP_RBRACE) { depth--; if (depth == 0) break; }
+            if (t == SliccTokenTypes.OP_SEMICOLON || t == SliccTokenTypes.OP_ASSIGN) {
+                isResourceList = false;
+                break;
+            }
+            b.advanceLexer();
+        }
+        lookahead.rollbackTo();
+
+        if (isResourceList) {
+            // parse resource list
+            while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_RBRACE) {
+                if (b.getTokenType() == SliccTokenTypes.IDENTIFIER) b.advanceLexer();
+                else if (b.getTokenType() == SliccTokenTypes.OP_COMMA) b.advanceLexer();
+                else b.advanceLexer();
+            }
+            expectToken(b, SliccTokenTypes.OP_RBRACE, "'}'");
+            resMarker.done(SliccTypes.RESOURCE_LIST);
+            // now expect the actual action block
+            if (b.getTokenType() == SliccTokenTypes.OP_LBRACE) {
+                parseTransitionActionBlock(b);
+            }
+        } else {
+            resMarker.drop();
+            // it's the action block directly
+            while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_RBRACE) {
+                if (!parseStatement(b)) b.advanceLexer();
+            }
+            expectToken(b, SliccTokenTypes.OP_RBRACE, "'}'");
+        }
+        transitionMarker.done(SliccTypes.TRANSITION_DECL);
+    }
+
+    private void parseTransitionActionBlock(PsiBuilder b) {
+        Marker m = b.mark();
+        b.advanceLexer(); // '{'
+        while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_RBRACE) {
+            if (b.getTokenType() == SliccTokenTypes.IDENTIFIER) {
+                b.advanceLexer();
+                if (b.getTokenType() == SliccTokenTypes.OP_SEMICOLON) b.advanceLexer();
+            } else {
+                b.advanceLexer();
+            }
+        }
+        expectToken(b, SliccTokenTypes.OP_RBRACE, "'}'");
+        m.done(SliccTypes.TRANSITION_ACTIONS);
+    }
+
+    private void parseTransitionStateList(PsiBuilder b) {
+        Marker m = b.mark();
+        if (b.getTokenType() == SliccTokenTypes.OP_LBRACE) {
+            b.advanceLexer();
+            while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_RBRACE) {
+                if (b.getTokenType() == SliccTokenTypes.IDENTIFIER) b.advanceLexer();
+                else if (b.getTokenType() == SliccTokenTypes.OP_COMMA) b.advanceLexer();
+                else b.advanceLexer();
+            }
+            expectToken(b, SliccTokenTypes.OP_RBRACE, "'}'");
+        } else {
+            parseIdent(b);
+        }
+        m.done(SliccTypes.TRANSITION_STATES);
+    }
+
+    private void parseTransitionEventList(PsiBuilder b) {
+        Marker m = b.mark();
+        if (b.getTokenType() == SliccTokenTypes.OP_LBRACE) {
+            b.advanceLexer();
+            while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_RBRACE) {
+                if (b.getTokenType() == SliccTokenTypes.IDENTIFIER) b.advanceLexer();
+                else if (b.getTokenType() == SliccTokenTypes.OP_COMMA) b.advanceLexer();
+                else b.advanceLexer();
+            }
+            expectToken(b, SliccTokenTypes.OP_RBRACE, "'}'");
+        } else {
+            parseIdent(b);
+        }
+        m.done(SliccTypes.TRANSITION_EVENTS);
+    }
+
+    // ......... in_port(name, Type, buffer, ...) { stmt* } ..............................................................................
+
+    private boolean parseInPortDecl(PsiBuilder b) {
+        Marker m = b.mark();
+        b.advanceLexer(); // 'in_port'
+        expectToken(b, SliccTokenTypes.OP_LPAREN, "'('");
+        parseIdent(b);
+        if (b.getTokenType() == SliccTokenTypes.OP_COMMA) { b.advanceLexer(); parseTypeOrIdent(b); }
+        if (b.getTokenType() == SliccTokenTypes.OP_COMMA) { b.advanceLexer(); parseIdent(b); }
+        parseAttrList(b);
+        expectToken(b, SliccTokenTypes.OP_RPAREN, "')'");
+        parseBlock(b);
+        m.done(SliccTypes.IN_PORT_DECL);
+        return true;
+    }
+
+    // ......... out_port(name, Type, buffer) ; ...............................................................................................................
+
+    private boolean parseOutPortDecl(PsiBuilder b) {
+        Marker m = b.mark();
+        b.advanceLexer(); // 'out_port'
+        expectToken(b, SliccTokenTypes.OP_LPAREN, "'('");
+        parseIdent(b);
+        if (b.getTokenType() == SliccTokenTypes.OP_COMMA) { b.advanceLexer(); parseTypeOrIdent(b); }
+        if (b.getTokenType() == SliccTokenTypes.OP_COMMA) { b.advanceLexer(); parseIdent(b); }
+        parseAttrList(b);
+        expectToken(b, SliccTokenTypes.OP_RPAREN, "')'");
+        if (b.getTokenType() == SliccTokenTypes.OP_SEMICOLON) b.advanceLexer();
+        m.done(SliccTypes.OUT_PORT_DECL);
+        return true;
+    }
+
+    // ......... Function declaration: retType name(params) { ? } ...................................................
+
+    private boolean parseFunctionDecl(PsiBuilder b) {
+        Marker m = b.mark();
+        parseTypeOrIdent(b); // return type
+        parseIdent(b);       // name
+        expectToken(b, SliccTokenTypes.OP_LPAREN, "'('");
+        parseParamList(b);
+        expectToken(b, SliccTokenTypes.OP_RPAREN, "')'");
+        if (b.getTokenType() == SliccTokenTypes.OP_SEMICOLON) {
+            b.advanceLexer(); // forward declaration
+        } else {
+            parseBlock(b);
+        }
+        m.done(SliccTypes.FUNCTION_DECL);
+        return true;
+    }
+
+    private void parseParamList(PsiBuilder b) {
+        Marker m = b.mark();
+        while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_RPAREN) {
+            Marker p = b.mark();
+            parseTypeOrIdent(b);
+            if (b.getTokenType() == SliccTokenTypes.IDENTIFIER) parseIdent(b);
+            p.done(SliccTypes.PARAM);
+            if (b.getTokenType() == SliccTokenTypes.OP_COMMA) b.advanceLexer();
+        }
+        m.done(SliccTypes.PARAM_LIST);
+    }
+
+    // ......... Attribute list: , key = "value" ...............................................................................................................
+
+    private void parseAttrList(PsiBuilder b) {
+        Marker m = b.mark();
+        while (b.getTokenType() == SliccTokenTypes.OP_COMMA) {
+            b.advanceLexer(); // consume ','
+            Marker attr = b.mark();
+            IElementType tt = b.getTokenType();
+            if (tt == SliccTokenTypes.IDENTIFIER || isAttrKeyword(tt)) {
+                b.advanceLexer(); // key
+                if (b.getTokenType() == SliccTokenTypes.OP_ASSIGN
+                        || b.getTokenType() == SliccTokenTypes.OP_EQ) {
+                    b.advanceLexer();
+                    parseAttrValue(b);
+                }
+                attr.done(SliccTypes.ATTRIBUTE);
+            } else {
+                // 遇到非预期 token，放弃这个 attr 但不死循环
+                attr.drop();
+                break;
+            }
+        }
+        m.done(SliccTypes.ATTRIBUTE_LIST);
+    }
+
+    private void parseAttrValue(PsiBuilder b) {
+        IElementType t = b.getTokenType();
+        if (t == SliccTokenTypes.STRING_LITERAL || t == SliccTokenTypes.INTEGER_LITERAL
+                || t == SliccTokenTypes.FLOAT_LITERAL || t == SliccTokenTypes.IDENTIFIER
+                || t == SliccTokenTypes.KW_TRUE || t == SliccTokenTypes.KW_FALSE) {
+            b.advanceLexer();
+        } else {
+            parseTypeOrIdent(b);
+        }
+    }
+
+    // ......... Block { stmt* } ...............................................................................................................................................................
+
+    private void parseBlock(PsiBuilder b) {
+        if (b.getTokenType() != SliccTokenTypes.OP_LBRACE) return;
+        Marker m = b.mark();
+        b.advanceLexer();
+        while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_RBRACE) {
+            if (!parseStatement(b)) b.advanceLexer();
+        }
+        expectToken(b, SliccTokenTypes.OP_RBRACE, "'}'");
+        m.done(SliccTypes.BLOCK);
+    }
+
+    // ......... Statement .................................................................................................................................................................................
+
+    private boolean parseStatement(PsiBuilder b) {
+        IElementType tt = b.getTokenType();
+        // if / else
+        if (tt == SliccTokenTypes.KW_IF) { parseIfStmt(b); return true; }
+        if (tt == SliccTokenTypes.KW_ELSE) { b.advanceLexer(); parseBlock(b); return true; }
+        if (tt == SliccTokenTypes.KW_RETURN) { parseReturnStmt(b); return true; }
+        if (tt == SliccTokenTypes.KW_FOR)  { parseForStmt(b); return true; }
+        if (tt == SliccTokenTypes.KW_WHILE){ parseWhileStmt(b); return true; }
+        // peek / enqueue / stall_and_wait / check_allocate
+        if (tt == SliccTokenTypes.KW_PEEK
+                || tt == SliccTokenTypes.KW_ENQUEUE
+                || tt == SliccTokenTypes.KW_STALL_AND_WAIT
+                || tt == SliccTokenTypes.KW_CHECK_ALLOCATE
+                || tt == SliccTokenTypes.KW_CHECK_STOP_SLOTS) {
+            parseBuiltinStmt(b); return true;
+        }
+        // assert / error
+        if (tt == SliccTokenTypes.KW_ASSERT || tt == SliccTokenTypes.KW_ERROR) {
+            parseBuiltinStmt(b); return true;
+        }
+        // DPRINTF / DEBUG_EXPR
+        if (tt == SliccTokenTypes.KW_DPRINTF || tt == SliccTokenTypes.KW_DEBUG_EXPR) {
+            parseBuiltinStmt(b); return true;
+        }
+        if (tt == SliccTokenTypes.KW_SET_CACHE_ENTRY || tt == SliccTokenTypes.KW_UNSET_CACHE_ENTRY
+                || tt == SliccTokenTypes.KW_SET_TBE || tt == SliccTokenTypes.KW_UNSET_TBE) {
+            parseBuiltinStmt(b); return true;
+        }
+        // variable declaration or expression statement
+        if (tt == SliccTokenTypes.IDENTIFIER || isTypeKeyword(tt)) {
+            parseExprOrDeclStmt(b); return true;
+        }
+        return false;
+    }
+
+    private void parseIfStmt(PsiBuilder b) {
+        Marker m = b.mark();
+        b.advanceLexer(); // 'if'
+        if (b.getTokenType() == SliccTokenTypes.OP_LPAREN) {
+            b.advanceLexer();
+            parseExpressionUntil(b, SliccTokenTypes.OP_RPAREN);
+            expectToken(b, SliccTokenTypes.OP_RPAREN, "')'");
+        }
+        parseBlock(b);
+        if (b.getTokenType() == SliccTokenTypes.KW_ELSE) {
+            b.advanceLexer();
+            if (b.getTokenType() == SliccTokenTypes.KW_IF) parseIfStmt(b);
+            else parseBlock(b);
+        }
+        m.done(SliccTypes.STATEMENT);
+    }
+
+    private void parseReturnStmt(PsiBuilder b) {
+        Marker m = b.mark();
+        b.advanceLexer(); // 'return'
+        if (b.getTokenType() != SliccTokenTypes.OP_SEMICOLON) {
+            parseExpressionUntil(b, SliccTokenTypes.OP_SEMICOLON);
+        }
+        if (b.getTokenType() == SliccTokenTypes.OP_SEMICOLON) b.advanceLexer();
+        m.done(SliccTypes.STATEMENT);
+    }
+
+    private void parseForStmt(PsiBuilder b) {
+        Marker m = b.mark();
+        b.advanceLexer(); // 'for'
+        if (b.getTokenType() == SliccTokenTypes.OP_LPAREN) {
+            b.advanceLexer();
+            parseExpressionUntil(b, SliccTokenTypes.OP_RPAREN);
+            if (b.getTokenType() == SliccTokenTypes.OP_RPAREN) b.advanceLexer();
+        }
+        parseBlock(b);
+        m.done(SliccTypes.STATEMENT);
+    }
+
+    private void parseWhileStmt(PsiBuilder b) {
+        Marker m = b.mark();
+        b.advanceLexer(); // 'while'
+        if (b.getTokenType() == SliccTokenTypes.OP_LPAREN) {
+            b.advanceLexer();
+            parseExpressionUntil(b, SliccTokenTypes.OP_RPAREN);
+            if (b.getTokenType() == SliccTokenTypes.OP_RPAREN) b.advanceLexer();
+        }
+        parseBlock(b);
+        m.done(SliccTypes.STATEMENT);
+    }
+
+    private void parseBuiltinStmt(PsiBuilder b) {
+        Marker m = b.mark();
+        b.advanceLexer(); // keyword
+        if (b.getTokenType() == SliccTokenTypes.OP_LPAREN) {
+            b.advanceLexer();
+            parseExpressionUntil(b, SliccTokenTypes.OP_RPAREN);
+            if (b.getTokenType() == SliccTokenTypes.OP_RPAREN) b.advanceLexer();
+        }
+        // peek / enqueue have a block body
+        if (b.getTokenType() == SliccTokenTypes.OP_LBRACE) {
+            parseBlock(b);
+        } else if (b.getTokenType() == SliccTokenTypes.OP_SEMICOLON) {
+            b.advanceLexer();
+        }
+        m.done(SliccTypes.STATEMENT);
+    }
+
+    private void parseExprOrDeclStmt(PsiBuilder b) {
+        // Could be: Type var := expr;  OR  expr;
+        Marker m = b.mark();
+        parseExpressionUntil(b, SliccTokenTypes.OP_SEMICOLON);
+        if (b.getTokenType() == SliccTokenTypes.OP_SEMICOLON) b.advanceLexer();
+        m.done(SliccTypes.STATEMENT);
+    }
+
+    // ......... Expression (permissive, stops at a terminator) ..................................................................
+
+    private void parseExpressionUntil(PsiBuilder b, IElementType terminator) {
+        int depth = 0;
+        while (!b.eof()) {
+            IElementType t = b.getTokenType();
+            if (t == terminator && depth == 0) break;
+            if (t == SliccTokenTypes.OP_LBRACE || t == SliccTokenTypes.OP_LPAREN
+                    || t == SliccTokenTypes.OP_LBRACKET) depth++;
+            if (t == SliccTokenTypes.OP_RBRACE || t == SliccTokenTypes.OP_RPAREN
+                    || t == SliccTokenTypes.OP_RBRACKET) {
+                if (depth == 0) break;
+                depth--;
+            }
+            b.advanceLexer();
+        }
+    }
+
+    // ......... Field / variable declaration ........................................................................................................................
+
+    private boolean parseFieldOrVar(PsiBuilder b) {
+        if (!isTypeOrIdentStart(b)) return false;
+        Marker m = b.mark();
+        parseTypeOrIdent(b); // type (possibly pointer)
+        if (b.getTokenType() == SliccTokenTypes.IDENTIFIER) {
+            parseIdent(b); // name
+        }
+        parseAttrList(b);
+        // optional default value
+        if (b.getTokenType() == SliccTokenTypes.OP_ASSIGN) {
+            b.advanceLexer();
+            parseExpressionUntil(b, SliccTokenTypes.OP_SEMICOLON);
+        }
+        if (b.getTokenType() == SliccTokenTypes.OP_SEMICOLON) b.advanceLexer();
+        m.done(SliccTypes.FIELD_DECL);
+        return true;
+    }
+
+    // ......... Type reference (possibly with * or template <...>) ......................................................
+
+    private void parseTypeOrIdent(PsiBuilder b) {
+        Marker m = b.mark();
+        if (b.getTokenType() == SliccTokenTypes.IDENTIFIER || isTypeKeyword(b.getTokenType())) {
+            b.advanceLexer();
+        }
+        // pointer
+        while (b.getTokenType() == SliccTokenTypes.OP_STAR) b.advanceLexer();
+        m.done(SliccTypes.TYPE_REF);
+    }
+
+    private void parseIdent(PsiBuilder b) {
+        if (b.getTokenType() == SliccTokenTypes.IDENTIFIER) {
+            b.advanceLexer();
+        }
+    }
+
+    // ......... Helpers .......................................................................................................................................................................................
+
+    private boolean isFunctionStart(PsiBuilder b) {
+        // Heuristic: type ident '(' ? look ahead two tokens
+        if (!isTypeOrIdentStart(b)) return false;
+        // We use a marker-based lookahead
+        Marker la = b.mark();
+        boolean result = false;
+        try {
+            if (b.getTokenType() == SliccTokenTypes.IDENTIFIER || isTypeKeyword(b.getTokenType())) {
+                b.advanceLexer();
+                // skip pointer
+                while (b.getTokenType() == SliccTokenTypes.OP_STAR) b.advanceLexer();
+                if (b.getTokenType() == SliccTokenTypes.IDENTIFIER) {
+                    b.advanceLexer();
+                    result = b.getTokenType() == SliccTokenTypes.OP_LPAREN;
+                }
+            }
+        } finally {
+            la.rollbackTo();
+        }
+        return result;
+    }
+
+    private boolean isFieldStart(PsiBuilder b) {
+        return b.getTokenType() == SliccTokenTypes.IDENTIFIER || isTypeKeyword(b.getTokenType());
+    }
+
+    private boolean isTypeOrIdentStart(PsiBuilder b) {
+        return b.getTokenType() == SliccTokenTypes.IDENTIFIER || isTypeKeyword(b.getTokenType());
+    }
+
+    private boolean isTypeKeyword(IElementType t) {
+        return t == SliccTokenTypes.KW_VOID || t == SliccTokenTypes.KW_BOOL
+                || t == SliccTokenTypes.KW_INT || t == SliccTokenTypes.KW_FLOAT
+                || t == SliccTokenTypes.KW_STRING;
+    }
+
+    private boolean isAttrKeyword(IElementType t) {
+        return t == SliccTokenTypes.KW_DESC || t == SliccTokenTypes.KW_DEFAULT
+                || t == SliccTokenTypes.KW_NETWORK || t == SliccTokenTypes.KW_VIRTUAL_NETWORK
+                || t == SliccTokenTypes.KW_VNET_TYPE || t == SliccTokenTypes.KW_RANK
+                || t == SliccTokenTypes.KW_INTERFACE || t == SliccTokenTypes.KW_EXTERNAL
+                || t == SliccTokenTypes.KW_PRIMITIVE || t == SliccTokenTypes.KW_ORDERED;
+    }
+
+    private void expectToken(PsiBuilder b, IElementType token, String msg) {
+        if (b.getTokenType() == token) {
+            b.advanceLexer();
+        } else {
+            b.error("Expected " + msg);
+        }
+    }
+}

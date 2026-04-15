@@ -1,0 +1,73 @@
+<idea-plugin>
+    <id>com.slicc.plugin</id>
+    <name>SLICC / gem5 Ruby Language Support</name>
+    <vendor email="slicc@gem5.org" url="https://www.gem5.org">gem5 Community</vendor>
+
+    <description><![CDATA[
+        Language support for SLICC (Specification Language for Implementing Cache Coherence)
+        used in gem5's Ruby memory subsystem (<code>.sm</code> and <code>.slicc</code> files).<br><br>
+        <b>Features:</b>
+        <ul>
+          <li>Syntax highlighting for keywords, built-ins, types, comments, strings</li>
+          <li>Semantic highlighting: machine / structure / action / function names</li>
+          <li>Ctrl+Click / Go-to-Declaration for actions, functions, types</li>
+          <li>Find Usages (Alt+F7)</li>
+          <li>Go to Symbol (Ctrl+Alt+Shift+N)</li>
+          <li>Auto-completion: SLICC keywords, gem5 types, file-local symbols</li>
+          <li>Code folding for machine / in_port / action / function bodies</li>
+          <li>Structure view (Alt+7)</li>
+          <li>Brace matching and auto-pairing { } ( ) [ ]</li>
+          <li>Comment toggle (Ctrl+/ and Ctrl+Shift+/)</li>
+          <li>Customisable colours: Settings &gt; Editor &gt; Color Scheme &gt; SLICC</li>
+        </ul>
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <!-- Compatible with IntelliJ Platform 241+ (IDEA 2024.1 / CLion 2024.1 and later) -->
+    <idea-version since-build="261"/>
+
+
+    <extensions defaultExtensionNs="com.intellij">
+
+        <fileType name="SLICC File"
+                  implementationClass="com.slicc.plugin.lang.SliccFileType"
+                  fieldName="INSTANCE"
+                  language="SLICC"
+                  extensions="sm;slicc"/>
+
+        <lang.parserDefinition language="SLICC"
+                               implementationClass="com.slicc.plugin.parser.SliccParserDefinition"/>
+
+        <lang.syntaxHighlighterFactory language="SLICC"
+                                       implementationClass="com.slicc.plugin.highlighting.SliccSyntaxHighlighterFactory"/>
+
+        <colorSettingsPage implementation="com.slicc.plugin.highlighting.SliccColorSettingsPage"/>
+
+        <annotator language="SLICC"
+                   implementationClass="com.slicc.plugin.highlighting.SliccAnnotator"/>
+
+        <lang.foldingBuilder language="SLICC"
+                             implementationClass="com.slicc.plugin.highlighting.SliccFoldingBuilder"/>
+
+        <completion.contributor language="SLICC"
+                                implementationClass="com.slicc.plugin.completion.SliccCompletionContributor"/>
+
+        <psi.referenceContributor language="SLICC"
+                                  implementation="com.slicc.plugin.navigation.SliccReferenceContributor"/>
+
+        <lang.findUsagesProvider language="SLICC"
+                                 implementationClass="com.slicc.plugin.navigation.SliccFindUsagesProvider"/>
+
+        <gotoSymbolContributor implementation="com.slicc.plugin.navigation.SliccGotoSymbolContributor"/>
+
+        <lang.psiStructureViewFactory language="SLICC"
+                                      implementationClass="com.slicc.plugin.navigation.SliccStructureViewFactory"/>
+
+        <lang.commenter language="SLICC"
+                        implementationClass="com.slicc.plugin.lang.SliccCommenter"/>
+
+        <lang.braceMatcher language="SLICC"
+                           implementationClass="com.slicc.plugin.lang.SliccBraceMatcher"/>
+
+    </extensions>
+</idea-plugin>
