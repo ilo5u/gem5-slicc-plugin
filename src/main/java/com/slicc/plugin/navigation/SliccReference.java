@@ -9,23 +9,8 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
-/**
- * Resolves a plain IDENTIFIER token to the named SLICC declaration that defines it.
- *
- * Resolution order (all within the same file for now):
- *   1. action declarations
- *   2. function declarations
- *   3. structure / external_type declarations
- *   4. enumeration / state_declaration declarations
- *   5. machine declarations
- *   6. in_port / out_port declarations
- *   7. field declarations inside the enclosing structure
- *   8. enum member declarations
- *
- * Cross-file resolution (via include directives) is a future enhancement;
- * the infrastructure is in place to extend getVariants() for that.
- */
 public class SliccReference extends PsiReferenceBase<PsiElement> {
 
     private final String myKey;
@@ -39,13 +24,41 @@ public class SliccReference extends PsiReferenceBase<PsiElement> {
     @Override
     public PsiElement resolve() {
         PsiFile file = myElement.getContainingFile();
-        if (file == null) return null;
-
-        // Walk through all named declarations in the file
-        for (SliccNamedElement decl : collectAllDeclarations(file)) {
-            if (myKey.equals(decl.getName())) return decl;
+        if (file == null) {
+            System.err.println("[SLICC-RESOLVE] key='" + myKey + "' FAIL: no containing file");
+            return null;
         }
-        return null;
+        var project = file.getProject();
+
+        // 1. Protocol scope
+        Set<PsiFile> protocolGroup = SliccProtocolIndex.groupContaining(file);
+        System.err.println("[SLICC-RESOLVE] key='" + myKey + "' protocolGroup size=" + protocolGroup.size()
+                + " files=" + protocolGroup.stream()
+                .map(f -> f.getVirtualFile() != null ? f.getVirtualFile().getName() : f.getName())
+                .toList());
+        PsiElement result = searchInFiles(protocolGroup);
+        if (result != null) {
+            System.err.println("[SLICC-RESOLVE] key='" + myKey + "' FOUND in protocol scope: "
+                    + result.getClass().getSimpleName()
+                    + " in " + result.getContainingFile().getVirtualFile().getName());
+            return result;
+        }
+
+        // 2. Global scope
+        Set<PsiFile> globalFiles = SliccProtocolIndex.globalFiles(project);
+        System.err.println("[SLICC-RESOLVE] key='" + myKey + "' globalFiles size=" + globalFiles.size()
+                + " files=" + globalFiles.stream()
+                .map(f -> f.getVirtualFile() != null ? f.getVirtualFile().getName() : f.getName())
+                .toList());
+        result = searchInFiles(globalFiles);
+        if (result != null) {
+            System.err.println("[SLICC-RESOLVE] key='" + myKey + "' FOUND in global scope: "
+                    + result.getClass().getSimpleName()
+                    + " in " + result.getContainingFile().getVirtualFile().getName());
+        } else {
+            System.err.println("[SLICC-RESOLVE] key='" + myKey + "' NOT FOUND anywhere");
+        }
+        return result;
     }
 
     @NotNull
@@ -53,17 +66,39 @@ public class SliccReference extends PsiReferenceBase<PsiElement> {
     public Object[] getVariants() {
         PsiFile file = myElement.getContainingFile();
         if (file == null) return PsiReference.EMPTY_ARRAY;
-        List<Object> variants = new ArrayList<>();
-        for (SliccNamedElement decl : collectAllDeclarations(file)) {
-            String name = decl.getName();
-            if (name != null && !name.isEmpty()) variants.add(name);
-        }
+        var project = file.getProject();
+
+        List<String> variants = new ArrayList<>();
+        for (PsiFile f : SliccProtocolIndex.groupContaining(file))
+            addVariants(f, variants);
+        for (PsiFile f : SliccProtocolIndex.globalFiles(project))
+            addVariants(f, variants);
         return variants.toArray();
     }
 
-    // ...... helpers ..............................................................................................................................................................................
+    // ── helpers ──────────────────────────────────────────────────────────
 
-    private static List<SliccNamedElement> collectAllDeclarations(PsiFile file) {
+    @Nullable
+    private PsiElement searchInFiles(Set<PsiFile> files) {
+        for (PsiFile f : files) {
+            List<SliccNamedElement> decls = collectDeclarations(f);
+            for (SliccNamedElement decl : decls) {
+                String name = decl.getName();
+                if (myKey.equals(name)) return decl;
+            }
+        }
+        return null;
+    }
+
+    private void addVariants(PsiFile file, List<String> out) {
+        for (SliccNamedElement decl : collectDeclarations(file)) {
+            String name = decl.getName();
+            if (name != null && !name.isEmpty() && !out.contains(name))
+                out.add(name);
+        }
+    }
+
+    private static List<SliccNamedElement> collectDeclarations(PsiFile file) {
         List<SliccNamedElement> result = new ArrayList<>();
         result.addAll(PsiTreeUtil.collectElementsOfType(file, SliccActionDecl.class));
         result.addAll(PsiTreeUtil.collectElementsOfType(file, SliccFunctionDecl.class));

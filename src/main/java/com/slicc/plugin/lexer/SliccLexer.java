@@ -30,19 +30,17 @@ public class SliccLexer extends LexerBase {
         KEYWORDS.put("action",             SliccTokenTypes.KW_ACTION);
         KEYWORDS.put("transition",         SliccTokenTypes.KW_TRANSITION);
         KEYWORDS.put("include",            SliccTokenTypes.KW_INCLUDE);
+        KEYWORDS.put("protocol",           SliccTokenTypes.KW_PROTOCOL);
         KEYWORDS.put("global",             SliccTokenTypes.KW_GLOBAL);
 
         KEYWORDS.put("void",              SliccTokenTypes.KW_VOID);
-        KEYWORDS.put("bool",              SliccTokenTypes.KW_BOOL);
-        KEYWORDS.put("int",               SliccTokenTypes.KW_INT);
-        KEYWORDS.put("float",             SliccTokenTypes.KW_FLOAT);
-        KEYWORDS.put("string",            SliccTokenTypes.KW_STRING);
         KEYWORDS.put("if",               SliccTokenTypes.KW_IF);
         KEYWORDS.put("else",             SliccTokenTypes.KW_ELSE);
         KEYWORDS.put("for",              SliccTokenTypes.KW_FOR);
         KEYWORDS.put("while",            SliccTokenTypes.KW_WHILE);
         KEYWORDS.put("return",           SliccTokenTypes.KW_RETURN);
         KEYWORDS.put("new",              SliccTokenTypes.KW_NEW);
+        KEYWORDS.put("static_cast",      SliccTokenTypes.KW_STATIC_CAST);
         KEYWORDS.put("true",             SliccTokenTypes.KW_TRUE);
         KEYWORDS.put("false",            SliccTokenTypes.KW_FALSE);
 
@@ -154,6 +152,18 @@ public class SliccLexer extends LexerBase {
             return SliccTokenTypes.BLOCK_COMMENT;
         }
 
+        // Single-quoted character/label literal: 'pV', 'sM', etc.
+        if (c == '\'') {
+            pos++;
+            while (pos < myBufferEnd && myBuffer.charAt(pos) != '\'') {
+                if (myBuffer.charAt(pos) == '\\') pos++; // escape
+                pos++;
+            }
+            if (pos < myBufferEnd) pos++; // closing '
+            myEnd = pos;
+            return SliccTokenTypes.STRING_LITERAL; // treat same as string literal
+        }
+
         // String literal
         if (c == '"') {
             pos++;
@@ -197,6 +207,7 @@ public class SliccLexer extends LexerBase {
         // Two-character operators
         if (pos + 1 < myBufferEnd) {
             char c2 = myBuffer.charAt(pos + 1);
+            if (c == ':' && c2 == ':') { myEnd = pos + 2; return SliccTokenTypes.OP_SCOPE; }
             if (c == ':' && c2 == '=') { myEnd = pos + 2; return SliccTokenTypes.OP_ASSIGN; }
             if (c == '=' && c2 == '=') { myEnd = pos + 2; return SliccTokenTypes.OP_EQ; }
             if (c == '!' && c2 == '=') { myEnd = pos + 2; return SliccTokenTypes.OP_NEQ; }
@@ -209,6 +220,7 @@ public class SliccLexer extends LexerBase {
         // Single-character tokens
         myEnd = pos + 1;
         switch (c) {
+            case '=': return SliccTokenTypes.OP_EQUALS;
             case ':': return SliccTokenTypes.OP_COLON;
             case ';': return SliccTokenTypes.OP_SEMICOLON;
             case ',': return SliccTokenTypes.OP_COMMA;

@@ -28,6 +28,7 @@ import org.jetbrains.annotations.NotNull;
  */
 public class SliccParser implements PsiParser, LightPsiParser {
 
+
     @NotNull
     @Override
     public ASTNode parse(@NotNull IElementType root, @NotNull PsiBuilder builder) {
@@ -55,6 +56,7 @@ public class SliccParser implements PsiParser, LightPsiParser {
 
     private boolean parseTopLevelDecl(PsiBuilder b) {
         IElementType tt = b.getTokenType();
+        if (tt == SliccTokenTypes.KW_PROTOCOL)      return parseProtocolDecl(b);
         if (tt == SliccTokenTypes.KW_MACHINE)       return parseMachineDecl(b);
         if (tt == SliccTokenTypes.KW_STRUCTURE)     return parseStructureDecl(b);
         if (tt == SliccTokenTypes.KW_ENUMERATION)   return parseEnumerationDecl(b);
@@ -65,6 +67,17 @@ public class SliccParser implements PsiParser, LightPsiParser {
         // free-standing function
         if (isFunctionStart(b))                     return parseFunctionDecl(b);
         return false;
+    }
+
+    // ......... protocol "Name" ; (root scope declaration in .slicc files) .............................
+
+    private boolean parseProtocolDecl(PsiBuilder b) {
+        Marker m = b.mark();
+        b.advanceLexer(); // 'protocol'
+        if (b.getTokenType() == SliccTokenTypes.STRING_LITERAL) b.advanceLexer();
+        if (b.getTokenType() == SliccTokenTypes.OP_SEMICOLON)   b.advanceLexer();
+        m.done(SliccTypes.INCLUDE_DECL); // reuse INCLUDE_DECL node type for simplicity
+        return true;
     }
 
     // ......... machine(...) : ? { ? } ..............................................................................................................................
@@ -88,11 +101,13 @@ public class SliccParser implements PsiParser, LightPsiParser {
     }
 
     private void parseMachineHeader(PsiBuilder b) {
-        // MachineType:Name , "desc"
-        parseTypeOrIdent(b); // MachineType
+        // Handles:  MachineType:SpPCache , "desc"
+        // The entire "MachineType:SpPCache" is the machine type reference.
+        // We consume: ident [ ':' ident ] [ ',' string ]
+        parseIdent(b); // e.g. MachineType
         if (b.getTokenType() == SliccTokenTypes.OP_COLON) {
-            b.advanceLexer();
-            parseIdent(b); // Name
+            b.advanceLexer(); // ':'
+            parseIdent(b);    // e.g. SpPCache
         }
         if (b.getTokenType() == SliccTokenTypes.OP_COMMA) {
             b.advanceLexer();
@@ -101,16 +116,35 @@ public class SliccParser implements PsiParser, LightPsiParser {
     }
 
     private void parseMachineParams(PsiBuilder b) {
-        // member variable declarations ended by '{'
+        // The machine params section (between ':' and '{') can contain:
+        // - field/variable declarations:   Cycles req_latency := 2;
+        // - structure declarations:        structure(SpeculativeController, ...) { ... }
+        // - enumeration declarations:      enumeration(Channel, ...) { ... }
+        // - include directives:            include "file.sm";
         while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_LBRACE) {
-            if (!parseFieldOrVar(b)) b.advanceLexer();
+            int before = b.getCurrentOffset();
+            IElementType tt = b.getTokenType();
+            if (tt == SliccTokenTypes.KW_STRUCTURE || tt == SliccTokenTypes.KW_GLOBAL) {
+                parseStructureDecl(b);
+            } else if (tt == SliccTokenTypes.KW_ENUMERATION) {
+                parseEnumerationDecl(b);
+            } else if (tt == SliccTokenTypes.KW_EXTERNAL_TYPE) {
+                parseExternalTypeDecl(b);
+            } else if (tt == SliccTokenTypes.KW_INCLUDE) {
+                parseIncludeDecl(b);
+            } else if (!parseFieldOrVar(b)) {
+                b.advanceLexer();
+            }
+            if (b.getCurrentOffset() == before) b.advanceLexer(); // safety
         }
     }
 
     private void parseMachineBody(PsiBuilder b) {
         expectToken(b, SliccTokenTypes.OP_LBRACE, "'{'");
         while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_RBRACE) {
+            int before = b.getCurrentOffset();
             if (!parseMachineMember(b)) b.advanceLexer();
+            if (b.getCurrentOffset() == before) b.advanceLexer(); // safety
         }
         expectToken(b, SliccTokenTypes.OP_RBRACE, "'}'");
     }
@@ -137,12 +171,15 @@ public class SliccParser implements PsiParser, LightPsiParser {
         b.advanceLexer(); // 'structure' or 'global'
         expectToken(b, SliccTokenTypes.OP_LPAREN, "'('");
         parseIdent(b);
+        skipOptionalPositionalString(b);
         parseAttrList(b);
         expectToken(b, SliccTokenTypes.OP_RPAREN, "')'");
         if (b.getTokenType() == SliccTokenTypes.OP_LBRACE) {
             b.advanceLexer();
             while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_RBRACE) {
+                int before = b.getCurrentOffset();
                 if (!parseStructureMember(b)) b.advanceLexer();
+                if (b.getCurrentOffset() == before) b.advanceLexer(); // safety
             }
             expectToken(b, SliccTokenTypes.OP_RBRACE, "'}'");
         }
@@ -163,11 +200,16 @@ public class SliccParser implements PsiParser, LightPsiParser {
         b.advanceLexer(); // 'enumeration'
         expectToken(b, SliccTokenTypes.OP_LPAREN, "'('");
         parseIdent(b);
+        // Optional positional string arg before attr list:
+        // enumeration(MaskPredictorType, "MaskPredictorType_Undefined", desc="...")
+        skipOptionalPositionalString(b);
         parseAttrList(b);
         expectToken(b, SliccTokenTypes.OP_RPAREN, "')'");
         expectToken(b, SliccTokenTypes.OP_LBRACE, "'{'");
         while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_RBRACE) {
+            int before = b.getCurrentOffset();
             parseEnumMember(b);
+            if (b.getCurrentOffset() == before) b.advanceLexer(); // safety: must always progress
         }
         expectToken(b, SliccTokenTypes.OP_RBRACE, "'}'");
         m.done(SliccTypes.ENUMERATION_DECL);
@@ -175,9 +217,14 @@ public class SliccParser implements PsiParser, LightPsiParser {
     }
 
     private void parseEnumMember(PsiBuilder b) {
+        // Member name is an IDENTIFIER (includes 'null' which lexes as IDENTIFIER in SLICC)
+        if (b.getTokenType() != SliccTokenTypes.IDENTIFIER) {
+            b.advanceLexer(); // skip unknown token, progress guard
+            return;
+        }
         Marker m = b.mark();
-        parseIdent(b);
-        parseAttrList(b);
+        b.advanceLexer();   // member name
+        parseAttrList(b);   // optional , AccessPermission:X , desc = "..."
         if (b.getTokenType() == SliccTokenTypes.OP_SEMICOLON) b.advanceLexer();
         m.done(SliccTypes.ENUM_MEMBER);
     }
@@ -189,11 +236,14 @@ public class SliccParser implements PsiParser, LightPsiParser {
         b.advanceLexer(); // 'state_declaration'
         expectToken(b, SliccTokenTypes.OP_LPAREN, "'('");
         parseIdent(b);
+        skipOptionalPositionalString(b);
         parseAttrList(b);
         expectToken(b, SliccTokenTypes.OP_RPAREN, "')'");
         expectToken(b, SliccTokenTypes.OP_LBRACE, "'{'");
         while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_RBRACE) {
+            int before = b.getCurrentOffset();
             parseEnumMember(b);
+            if (b.getCurrentOffset() == before) b.advanceLexer(); // safety
         }
         expectToken(b, SliccTokenTypes.OP_RBRACE, "'}'");
         m.done(SliccTypes.STATE_DECL);
@@ -206,14 +256,19 @@ public class SliccParser implements PsiParser, LightPsiParser {
         Marker m = b.mark();
         b.advanceLexer(); // 'external_type'
         expectToken(b, SliccTokenTypes.OP_LPAREN, "'('");
-        parseIdent(b);
+        // Type name: may be a keyword (int, bool, string) or a scoped C++ name (std::string)
+        Marker nameM = b.mark();
+        parseTypeName(b);
+        nameM.done(SliccTypes.REFERENCE); // wrap so getNameIdentifier() can find it
         parseAttrList(b);
         expectToken(b, SliccTokenTypes.OP_RPAREN, "')'");
         // optional method body
         if (b.getTokenType() == SliccTokenTypes.OP_LBRACE) {
             b.advanceLexer();
             while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_RBRACE) {
+                int before = b.getCurrentOffset();
                 if (!parseFunctionDecl(b)) b.advanceLexer();
+                if (b.getCurrentOffset() == before) b.advanceLexer(); // safety
             }
             expectToken(b, SliccTokenTypes.OP_RBRACE, "'}'");
         }
@@ -239,9 +294,20 @@ public class SliccParser implements PsiParser, LightPsiParser {
         b.advanceLexer(); // 'action'
         expectToken(b, SliccTokenTypes.OP_LPAREN, "'('");
         parseIdent(b); // action name
+        // Optional short-name: either a string literal "xx" or single-quoted 'xx'
+        // followed by optional attribute list.
+        // We must NOT consume the ',' if it is the start of an attribute key=value pair.
         if (b.getTokenType() == SliccTokenTypes.OP_COMMA) {
-            b.advanceLexer();
-            if (b.getTokenType() == SliccTokenTypes.STRING_LITERAL) b.advanceLexer();
+            // Peek: if next after ',' is a string literal, it's the short name
+            Marker peek = b.mark();
+            b.advanceLexer(); // consume ','
+            if (b.getTokenType() == SliccTokenTypes.STRING_LITERAL) {
+                b.advanceLexer(); // consume short name
+                peek.drop();
+            } else {
+                // Not a short name — roll back so parseAttrList can see the ','
+                peek.rollbackTo();
+            }
         }
         parseAttrList(b);
         expectToken(b, SliccTokenTypes.OP_RPAREN, "')'");
@@ -267,7 +333,7 @@ public class SliccParser implements PsiParser, LightPsiParser {
         expectToken(b, SliccTokenTypes.OP_RPAREN, "')'");
         // optional resource list {TagArrayRead, ...}
         if (b.getTokenType() == SliccTokenTypes.OP_LBRACE) {
-            // peek ahead: if first token after { is an identifier followed by } or , 
+            // peek ahead: if first token after { is an identifier followed by } or ,
             // and no statements, treat as resource list
             parseResourceListOrBlock(b, m);
             return true;
@@ -317,7 +383,9 @@ public class SliccParser implements PsiParser, LightPsiParser {
             resMarker.drop();
             // it's the action block directly
             while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_RBRACE) {
+                int before = b.getCurrentOffset();
                 if (!parseStatement(b)) b.advanceLexer();
+                if (b.getCurrentOffset() == before) b.advanceLexer(); // safety
             }
             expectToken(b, SliccTokenTypes.OP_RBRACE, "'}'");
         }
@@ -407,8 +475,13 @@ public class SliccParser implements PsiParser, LightPsiParser {
 
     private boolean parseFunctionDecl(PsiBuilder b) {
         Marker m = b.mark();
-        parseTypeOrIdent(b); // return type
-        parseIdent(b);       // name
+        parseTypeOrIdent(b); // return type (wrapped in TYPE_REF)
+        // Mark the function name separately so getNameIdentifier() finds it
+        Marker nameMark = b.mark();
+        if (b.getTokenType() == SliccTokenTypes.IDENTIFIER) {
+            b.advanceLexer();
+        }
+        nameMark.done(SliccTypes.REFERENCE); // use REFERENCE as the name-node marker
         expectToken(b, SliccTokenTypes.OP_LPAREN, "'('");
         parseParamList(b);
         expectToken(b, SliccTokenTypes.OP_RPAREN, "')'");
@@ -424,11 +497,13 @@ public class SliccParser implements PsiParser, LightPsiParser {
     private void parseParamList(PsiBuilder b) {
         Marker m = b.mark();
         while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_RPAREN) {
+            int before = b.getCurrentOffset();
             Marker p = b.mark();
             parseTypeOrIdent(b);
             if (b.getTokenType() == SliccTokenTypes.IDENTIFIER) parseIdent(b);
             p.done(SliccTypes.PARAM);
             if (b.getTokenType() == SliccTokenTypes.OP_COMMA) b.advanceLexer();
+            if (b.getCurrentOffset() == before) b.advanceLexer(); // safety
         }
         m.done(SliccTypes.PARAM_LIST);
     }
@@ -442,15 +517,19 @@ public class SliccParser implements PsiParser, LightPsiParser {
             Marker attr = b.mark();
             IElementType tt = b.getTokenType();
             if (tt == SliccTokenTypes.IDENTIFIER || isAttrKeyword(tt)) {
-                b.advanceLexer(); // key
-                if (b.getTokenType() == SliccTokenTypes.OP_ASSIGN
-                        || b.getTokenType() == SliccTokenTypes.OP_EQ) {
+                b.advanceLexer(); // key (or type like AccessPermission)
+                if (b.getTokenType() == SliccTokenTypes.OP_COLON) {
+                    // Type:Value form, e.g. AccessPermission:NotPresent
+                    b.advanceLexer(); // ':'
+                    if (b.getTokenType() == SliccTokenTypes.IDENTIFIER) b.advanceLexer();
+                } else if (b.getTokenType() == SliccTokenTypes.OP_EQUALS) {
                     b.advanceLexer();
                     parseAttrValue(b);
+                } else {
                 }
                 attr.done(SliccTypes.ATTRIBUTE);
             } else {
-                // 遇到非预期 token，放弃这个 attr 但不死循环
+                // unexpected token after comma - stop attribute list
                 attr.drop();
                 break;
             }
@@ -461,11 +540,19 @@ public class SliccParser implements PsiParser, LightPsiParser {
     private void parseAttrValue(PsiBuilder b) {
         IElementType t = b.getTokenType();
         if (t == SliccTokenTypes.STRING_LITERAL || t == SliccTokenTypes.INTEGER_LITERAL
-                || t == SliccTokenTypes.FLOAT_LITERAL || t == SliccTokenTypes.IDENTIFIER
+                || t == SliccTokenTypes.FLOAT_LITERAL
                 || t == SliccTokenTypes.KW_TRUE || t == SliccTokenTypes.KW_FALSE) {
             b.advanceLexer();
+        } else if (t == SliccTokenTypes.IDENTIFIER || isTypeKeyword(t)) {
+            // Could be a plain identifier, or a qualified value like AccessPermission:Read_Only
+            b.advanceLexer();
+            if (b.getTokenType() == SliccTokenTypes.OP_COLON) {
+                b.advanceLexer(); // ':'
+                if (b.getTokenType() == SliccTokenTypes.IDENTIFIER) b.advanceLexer();
+            }
         } else {
-            parseTypeOrIdent(b);
+            // fallback: skip one token so we always progress
+            if (!b.eof()) b.advanceLexer();
         }
     }
 
@@ -476,7 +563,9 @@ public class SliccParser implements PsiParser, LightPsiParser {
         Marker m = b.mark();
         b.advanceLexer();
         while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_RBRACE) {
+            int before = b.getCurrentOffset();
             if (!parseStatement(b)) b.advanceLexer();
+            if (b.getCurrentOffset() == before) b.advanceLexer(); // safety
         }
         expectToken(b, SliccTokenTypes.OP_RBRACE, "'}'");
         m.done(SliccTypes.BLOCK);
@@ -511,6 +600,10 @@ public class SliccParser implements PsiParser, LightPsiParser {
         if (tt == SliccTokenTypes.KW_SET_CACHE_ENTRY || tt == SliccTokenTypes.KW_UNSET_CACHE_ENTRY
                 || tt == SliccTokenTypes.KW_SET_TBE || tt == SliccTokenTypes.KW_UNSET_TBE) {
             parseBuiltinStmt(b); return true;
+        }
+        // static_cast<Type>(expr); — treated as an expression statement
+        if (tt == SliccTokenTypes.KW_STATIC_CAST) {
+            parseExprOrDeclStmt(b); return true;
         }
         // variable declaration or expression statement
         if (tt == SliccTokenTypes.IDENTIFIER || isTypeKeyword(tt)) {
@@ -637,12 +730,39 @@ public class SliccParser implements PsiParser, LightPsiParser {
 
     private void parseTypeOrIdent(PsiBuilder b) {
         Marker m = b.mark();
-        if (b.getTokenType() == SliccTokenTypes.IDENTIFIER || isTypeKeyword(b.getTokenType())) {
-            b.advanceLexer();
-        }
+        // Consume first part of type name (identifier or any type-like keyword)
+        parseTypeName(b);
         // pointer
         while (b.getTokenType() == SliccTokenTypes.OP_STAR) b.advanceLexer();
         m.done(SliccTypes.TYPE_REF);
+    }
+
+    /**
+     * Consume a (possibly scoped) type name such as:
+     *   int  bool  string  void  float        — primitive keywords used as type names
+     *   CacheMemory  SpSequencer              — user-defined identifiers
+     *   std::string  prefetch::Base           — C++ scoped names with ::
+     *
+     * All of these are valid as the name argument to external_type(...) and
+     * as type references in field declarations and parameter lists.
+     */
+    private void parseTypeName(PsiBuilder b) {
+        IElementType tt = b.getTokenType();
+        if (tt == SliccTokenTypes.IDENTIFIER || isAnyTypeToken(tt)) {
+            b.advanceLexer();
+            // Consume ::ident chains (C++ scoped names: std::string, prefetch::Base)
+            while (b.getTokenType() == SliccTokenTypes.OP_SCOPE) {
+                b.advanceLexer(); // ::
+                if (b.getTokenType() == SliccTokenTypes.IDENTIFIER || isAnyTypeToken(b.getTokenType())) {
+                    b.advanceLexer();
+                }
+            }
+        }
+    }
+
+    /** True for any token that can start a type name — keywords or identifier. */
+    private boolean isAnyTypeToken(IElementType t) {
+        return isTypeKeyword(t); // void, bool, int, float, string
     }
 
     private void parseIdent(PsiBuilder b) {
@@ -684,9 +804,7 @@ public class SliccParser implements PsiParser, LightPsiParser {
     }
 
     private boolean isTypeKeyword(IElementType t) {
-        return t == SliccTokenTypes.KW_VOID || t == SliccTokenTypes.KW_BOOL
-                || t == SliccTokenTypes.KW_INT || t == SliccTokenTypes.KW_FLOAT
-                || t == SliccTokenTypes.KW_STRING;
+        return t == SliccTokenTypes.KW_VOID;
     }
 
     private boolean isAttrKeyword(IElementType t) {
@@ -695,6 +813,30 @@ public class SliccParser implements PsiParser, LightPsiParser {
                 || t == SliccTokenTypes.KW_VNET_TYPE || t == SliccTokenTypes.KW_RANK
                 || t == SliccTokenTypes.KW_INTERFACE || t == SliccTokenTypes.KW_EXTERNAL
                 || t == SliccTokenTypes.KW_PRIMITIVE || t == SliccTokenTypes.KW_ORDERED;
+    }
+
+    /**
+     * Consumes an optional positional string literal that appears after the
+     * declaration name but before the key=value attribute list.
+     *
+     * Examples:
+     *   enumeration(MaskPredictorType, "MaskPredictorType_Undefined", desc="...")
+     *   structure(Foo, "some description", external="yes")
+     *
+     * The string is preceded by a comma (just like attributes), but is a bare
+     * string value rather than a key=value pair.  We use rollback to
+     * distinguish it from the start of a normal attribute list.
+     */
+    private void skipOptionalPositionalString(PsiBuilder b) {
+        if (b.getTokenType() != SliccTokenTypes.OP_COMMA) return;
+        Marker peek = b.mark();
+        b.advanceLexer(); // consume ','
+        if (b.getTokenType() == SliccTokenTypes.STRING_LITERAL) {
+            b.advanceLexer(); // consume the string
+            peek.drop();      // keep the advance
+        } else {
+            peek.rollbackTo(); // not a positional string — leave ',' for parseAttrList
+        }
     }
 
     private void expectToken(PsiBuilder b, IElementType token, String msg) {

@@ -1,5 +1,6 @@
 package com.slicc.plugin.lexer;
 
+import com.intellij.psi.TokenType;
 import com.intellij.psi.tree.IElementType;
 import com.slicc.plugin.lang.SliccLanguage;
 
@@ -16,20 +17,18 @@ public interface SliccTokenTypes {
     IElementType KW_ACTION           = new SliccTokenType("action");
     IElementType KW_TRANSITION       = new SliccTokenType("transition");
     IElementType KW_INCLUDE          = new SliccTokenType("include");
+    IElementType KW_PROTOCOL         = new SliccTokenType("protocol");
     IElementType KW_GLOBAL           = new SliccTokenType("global");
 
     // ...... C++ compatible keywords .................................................................................................................................
     IElementType KW_VOID             = new SliccTokenType("void");
-    IElementType KW_BOOL             = new SliccTokenType("bool");
-    IElementType KW_INT              = new SliccTokenType("int");
-    IElementType KW_FLOAT            = new SliccTokenType("float");
-    IElementType KW_STRING           = new SliccTokenType("string");
     IElementType KW_IF               = new SliccTokenType("if");
     IElementType KW_ELSE             = new SliccTokenType("else");
     IElementType KW_FOR              = new SliccTokenType("for");
     IElementType KW_WHILE            = new SliccTokenType("while");
     IElementType KW_RETURN           = new SliccTokenType("return");
     IElementType KW_NEW              = new SliccTokenType("new");
+    IElementType KW_STATIC_CAST      = new SliccTokenType("static_cast");
     IElementType KW_NULL_KWORD       = new SliccTokenType("OOD_NULL");  // OOD = out of declaration
     IElementType KW_TRUE             = new SliccTokenType("true");
     IElementType KW_FALSE            = new SliccTokenType("false");
@@ -73,6 +72,8 @@ public interface SliccTokenTypes {
 
     // ...... Operators & punctuation .................................................................................................................................
     IElementType OP_ASSIGN           = new SliccTokenType(":=");
+    IElementType OP_EQUALS           = new SliccTokenType("=");
+    IElementType OP_SCOPE            = new SliccTokenType("::");  // C++ scope, e.g. std::string
     IElementType OP_COLON            = new SliccTokenType(":");
     IElementType OP_SEMICOLON        = new SliccTokenType(";");
     IElementType OP_COMMA            = new SliccTokenType(",");
@@ -102,8 +103,10 @@ public interface SliccTokenTypes {
     // ...... Comments & whitespace .......................................................................................................................................
     IElementType LINE_COMMENT        = new SliccTokenType("LINE_COMMENT");
     IElementType BLOCK_COMMENT       = new SliccTokenType("BLOCK_COMMENT");
-    IElementType WHITE_SPACE         = new SliccTokenType("WHITE_SPACE");
+    // MUST use the platform singleton so PsiBuilder auto-skips whitespace tokens
+    IElementType WHITE_SPACE         = TokenType.WHITE_SPACE;
 
     // ...... Special .................................................................................................................................................................................
-    IElementType BAD_CHARACTER       = new SliccTokenType("BAD_CHARACTER");
+    // MUST use the platform singleton for bad characters
+    IElementType BAD_CHARACTER       = TokenType.BAD_CHARACTER;
 }

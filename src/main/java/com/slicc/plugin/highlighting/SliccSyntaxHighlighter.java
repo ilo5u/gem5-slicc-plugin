@@ -98,9 +98,27 @@ public class SliccSyntaxHighlighter extends SyntaxHighlighterBase {
             createTextAttributesKey("SLICC_STRUCTURE_NAME",
                     DefaultLanguageHighlighterColors.CLASS_NAME);
 
-    public static final TextAttributesKey ENUM_NAME =
-            createTextAttributesKey("SLICC_ENUM_NAME",
-                    DefaultLanguageHighlighterColors.CLASS_NAME);
+    /**
+     * Used for enumeration(...) and state_declaration(...) names:
+     * AccessPermission, State, Event, Channel, MachineType, etc.
+     * These define new enum types — highlighted like an interface/type alias
+     * (distinct from struct/class names).
+     */
+    public static final TextAttributesKey ENUM_TYPE_NAME =
+            createTextAttributesKey("SLICC_ENUM_TYPE_NAME",
+                    DefaultLanguageHighlighterColors.INTERFACE_NAME);
+
+    /** Keep for backwards compat — same as ENUM_TYPE_NAME */
+    public static final TextAttributesKey ENUM_NAME = ENUM_TYPE_NAME;
+
+    /**
+     * Used for enum/state member names declared inside enumeration { } or
+     * state_declaration { } bodies: Load, Store, I, LM, LE, Request, …
+     * Highlighted like enum constants.
+     */
+    public static final TextAttributesKey ENUM_MEMBER_VALUE =
+            createTextAttributesKey("SLICC_ENUM_MEMBER_VALUE",
+                    DefaultLanguageHighlighterColors.CONSTANT);
 
     public static final TextAttributesKey ACTION_NAME =
             createTextAttributesKey("SLICC_ACTION_NAME",
@@ -109,6 +127,15 @@ public class SliccSyntaxHighlighter extends SyntaxHighlighterBase {
     public static final TextAttributesKey FUNCTION_NAME =
             createTextAttributesKey("SLICC_FUNCTION_NAME",
                     DefaultLanguageHighlighterColors.FUNCTION_DECLARATION);
+
+    /**
+     * Used for structure/TBE member variable names:
+     * state, address, DataBlk, v, d, e, pos, allocated_list, …
+     * Highlighted like instance fields.
+     */
+    public static final TextAttributesKey FIELD_NAME =
+            createTextAttributesKey("SLICC_FIELD_NAME",
+                    DefaultLanguageHighlighterColors.INSTANCE_FIELD);
 
     public static final TextAttributesKey TRANSITION_LABEL =
             createTextAttributesKey("SLICC_TRANSITION_LABEL",
@@ -138,6 +165,7 @@ public class SliccSyntaxHighlighter extends SyntaxHighlighterBase {
                 || type == SliccTokenTypes.KW_ACTION
                 || type == SliccTokenTypes.KW_TRANSITION
                 || type == SliccTokenTypes.KW_INCLUDE
+                || type == SliccTokenTypes.KW_PROTOCOL
                 || type == SliccTokenTypes.KW_GLOBAL) {
             return pack(DECL_KEYWORD);
         }
@@ -152,10 +180,6 @@ public class SliccSyntaxHighlighter extends SyntaxHighlighterBase {
         }
         // Type keywords + bool literals
         if (type == SliccTokenTypes.KW_VOID
-                || type == SliccTokenTypes.KW_BOOL
-                || type == SliccTokenTypes.KW_INT
-                || type == SliccTokenTypes.KW_FLOAT
-                || type == SliccTokenTypes.KW_STRING
                 || type == SliccTokenTypes.KW_TRUE
                 || type == SliccTokenTypes.KW_FALSE) {
             return pack(TYPE_KEYWORD);
@@ -175,7 +199,8 @@ public class SliccSyntaxHighlighter extends SyntaxHighlighterBase {
                 || type == SliccTokenTypes.KW_SET_CACHE_ENTRY
                 || type == SliccTokenTypes.KW_UNSET_CACHE_ENTRY
                 || type == SliccTokenTypes.KW_SET_TBE
-                || type == SliccTokenTypes.KW_UNSET_TBE) {
+                || type == SliccTokenTypes.KW_UNSET_TBE
+                || type == SliccTokenTypes.KW_STATIC_CAST) {
             return pack(BUILTIN_STMT);
         }
         // Attribute keywords
