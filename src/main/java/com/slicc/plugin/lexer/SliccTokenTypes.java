@@ -61,6 +61,13 @@ public interface SliccTokenTypes {
     IElementType KW_EXTERNAL         = new SliccTokenType("external");
     IElementType KW_PRIMITIVE        = new SliccTokenType("primitive");
     IElementType KW_ORDERED          = new SliccTokenType("ordered");
+    IElementType KW_TEMPLATE         = new SliccTokenType("template");
+    IElementType KW_CONSTRUCTOR      = new SliccTokenType("constructor");
+    IElementType KW_NON_OBJ          = new SliccTokenType("non_obj");
+    IElementType KW_IMPLICIT_CTOR    = new SliccTokenType("implicit_ctor");
+    IElementType KW_BUFFER           = new SliccTokenType("buffer");
+    IElementType KW_INPORT           = new SliccTokenType("inport");
+    IElementType KW_OUTPORT          = new SliccTokenType("outport");
 
     // ...... Literals ..............................................................................................................................................................................
     IElementType INTEGER_LITERAL     = new SliccTokenType("INTEGER_LITERAL");

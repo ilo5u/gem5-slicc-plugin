@@ -213,7 +213,14 @@ public class SliccSyntaxHighlighter extends SyntaxHighlighterBase {
                 || type == SliccTokenTypes.KW_INTERFACE
                 || type == SliccTokenTypes.KW_EXTERNAL
                 || type == SliccTokenTypes.KW_PRIMITIVE
-                || type == SliccTokenTypes.KW_ORDERED) {
+                || type == SliccTokenTypes.KW_ORDERED
+                || type == SliccTokenTypes.KW_TEMPLATE
+                || type == SliccTokenTypes.KW_CONSTRUCTOR
+                || type == SliccTokenTypes.KW_NON_OBJ
+                || type == SliccTokenTypes.KW_IMPLICIT_CTOR
+                || type == SliccTokenTypes.KW_BUFFER
+                || type == SliccTokenTypes.KW_INPORT
+                || type == SliccTokenTypes.KW_OUTPORT) {
             return pack(ATTRIBUTE_KEYWORD);
         }
         // Comments

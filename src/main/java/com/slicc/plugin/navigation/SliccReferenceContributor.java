@@ -1,5 +1,6 @@
 package com.slicc.plugin.navigation;
 
+import com.intellij.openapi.util.TextRange;
 import com.intellij.patterns.PlatformPatterns;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.source.tree.LeafPsiElement;
@@ -8,21 +9,18 @@ import com.slicc.plugin.lang.SliccLanguage;
 import com.slicc.plugin.lexer.SliccTokenTypes;
 import com.slicc.plugin.psi.*;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-/**
- * Attaches {@link SliccReference} to IDENTIFIER leaves that are NOT:
- *   - declaration name positions
- *   - inside TYPE_REF nodes (those get references via SliccCompositeElement.getReference())
- *   - inside REFERENCE nodes (function name markers)
- */
 public class SliccReferenceContributor extends PsiReferenceContributor {
 
     @Override
     public void registerReferenceProviders(@NotNull PsiReferenceRegistrar registrar) {
+
+        // NO withLanguage filter — check language manually inside the provider
+        // to avoid false negatives from language instance mismatch
         registrar.registerReferenceProvider(
                 PlatformPatterns.psiElement(LeafPsiElement.class)
-                        .withElementType(SliccTokenTypes.IDENTIFIER)
-                        .withLanguage(SliccLanguage.INSTANCE),
+                        .withElementType(SliccTokenTypes.IDENTIFIER),
                 new PsiReferenceProvider() {
                     @NotNull
                     @Override
@@ -30,29 +28,32 @@ public class SliccReferenceContributor extends PsiReferenceContributor {
                             @NotNull PsiElement element,
                             @NotNull ProcessingContext context) {
 
-                        String text = element.getText();
+                        // Manual language check
+                        if (!element.getLanguage().isKindOf(SliccLanguage.INSTANCE)) {
+                            return PsiReference.EMPTY_ARRAY;
+                        }
 
-                        // Skip declaration name positions
+                        String text = element.getText();
+                        System.err.println("[SLICC-LEAF] called for: '" + text + "'");
+
+                        // On the declaration name: self-reference
                         if (element.getParent() instanceof SliccNamedElement named
                                 && element.equals(named.getNameIdentifier())) {
-                            System.err.println("[SLICC-REF] skip decl name: '" + text + "'");
-                            return PsiReference.EMPTY_ARRAY;
+                            System.err.println("[SLICC-LEAF] self-ref on decl name: '" + text + "'");
+                            return new PsiReference[]{new PsiReferenceBase<PsiElement>(element,
+                                    new TextRange(0, element.getTextLength())) {
+                                @Override
+                                public @Nullable PsiElement resolve() { return named; }
+                            }};
                         }
-                        // Skip identifiers inside TYPE_REF — handled by SliccCompositeElement.getReference()
-                        if (element.getParent() instanceof SliccCompositeElement parent
-                                && parent.getNode().getElementType() == SliccTypes.TYPE_REF) {
-                            System.err.println("[SLICC-REF] skip TYPE_REF child: '" + text + "'");
-                            return PsiReference.EMPTY_ARRAY;
-                        }
-                        // Skip identifiers inside REFERENCE nodes (function name markers)
+
+                        // Skip REFERENCE nodes (function name markers)
                         if (element.getParent() instanceof SliccCompositeElement parent
                                 && parent.getNode().getElementType() == SliccTypes.REFERENCE) {
-                            System.err.println("[SLICC-REF] skip REFERENCE child: '" + text + "'");
                             return PsiReference.EMPTY_ARRAY;
                         }
 
-                        System.err.println("[SLICC-REF] attach ref to IDENTIFIER: '" + text + "'"
-                                + " parent=" + element.getParent().getClass().getSimpleName());
+                        System.err.println("[SLICC-LEAF] attach SliccReference: '" + text + "'");
                         return new PsiReference[]{new SliccReference(element)};
                     }
                 });

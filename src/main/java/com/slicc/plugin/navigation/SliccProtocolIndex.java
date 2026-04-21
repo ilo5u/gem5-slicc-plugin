@@ -14,33 +14,15 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
-/**
- * Two-level scope model for SLICC:
- *
- *  Global scope  — RubySlicc_interfaces.slicc and all files it includes.
- *                  Defines Cycles, MachineType, SpSequencer, DataBlock, etc.
- *                  Available everywhere. Located by searching all .slicc files
- *                  for the one named "RubySlicc_interfaces.slicc".
- *                  Falls back to treating ALL .sm files not owned by a protocol
- *                  as global if the root file is not found.
- *
- *  Protocol scope — Each protocol's *.slicc root (e.g. Tuice.slicc) and
- *                   all files reachable from it via include.
- *                   Overrides / extends the global scope.
- */
 public class SliccProtocolIndex {
 
     private static final String GLOBAL_ROOT = "RubySlicc_interfaces.slicc";
 
     private SliccProtocolIndex() {}
 
-    // ── Public API ────────────────────────────────────────────────────────
-
     @NotNull
     public static Set<PsiFile> globalFiles(@NotNull Project project) {
         PsiManager manager = PsiManager.getInstance(project);
-
-        // Search all SLICC files (both .sm and .slicc) for the global root
         for (VirtualFile vf : FileTypeIndex.getFiles(
                 SliccFileType.INSTANCE, GlobalSearchScope.allScope(project))) {
             if (GLOBAL_ROOT.equals(vf.getName())) {
@@ -48,30 +30,54 @@ public class SliccProtocolIndex {
                 if (root != null) {
                     Set<PsiFile> result = new LinkedHashSet<>();
                     collectFromFile(root, result, new HashSet<>());
+                    System.err.println("[SLICC-IDX] globalFiles size=" + result.size()
+                            + " files=" + result.stream().map(f ->
+                                    f.getVirtualFile() != null ? f.getVirtualFile().getName() : f.getName())
+                            .toList());
                     return result;
                 }
             }
         }
+        System.err.println("[SLICC-IDX] globalFiles: EMPTY (RubySlicc_interfaces.slicc not found)");
         return Collections.emptySet();
     }
 
     @NotNull
     public static Set<PsiFile> groupContaining(@NotNull PsiFile file) {
-        Project project = file.getProject();
-        for (Set<PsiFile> group : allProtocolGroups(project)) {
-            if (group.contains(file)) return group;
+        VirtualFile fileVf = file.getVirtualFile();
+        if (fileVf == null) {
+            System.err.println("[SLICC-IDX] groupContaining: file has no VirtualFile: " + file.getName());
+            return fallback(file);
         }
-        // Fallback: self + own direct includes
-        Set<PsiFile> fallback = new LinkedHashSet<>();
-        collectFromFile(file, fallback, new HashSet<>());
-        return fallback;
+        String filePath = fileVf.getPath();
+        Project project = file.getProject();
+
+        for (Set<PsiFile> group : allProtocolGroups(project)) {
+            for (PsiFile member : group) {
+                VirtualFile memberVf = member.getVirtualFile();
+                if (memberVf != null && filePath.equals(memberVf.getPath())) {
+                    System.err.println("[SLICC-IDX] groupContaining('"
+                            + fileVf.getName() + "'): found group size=" + group.size());
+                    return group;
+                }
+            }
+        }
+
+        System.err.println("[SLICC-IDX] groupContaining('"
+                + fileVf.getName() + "'): NOT IN ANY GROUP -> fallback");
+        return fallback(file);
+    }
+
+    private static Set<PsiFile> fallback(@NotNull PsiFile file) {
+        Set<PsiFile> result = new LinkedHashSet<>();
+        collectFromFile(file, result, new HashSet<>());
+        return result;
     }
 
     @NotNull
     public static List<Set<PsiFile>> allProtocolGroups(@NotNull Project project) {
         PsiManager manager = PsiManager.getInstance(project);
         List<Set<PsiFile>> result = new ArrayList<>();
-
         for (VirtualFile vf : FileTypeIndex.getFiles(
                 SliccFileType.INSTANCE, GlobalSearchScope.allScope(project))) {
             if (!"slicc".equalsIgnoreCase(vf.getExtension())) continue;
@@ -84,8 +90,6 @@ public class SliccProtocolIndex {
         }
         return result;
     }
-
-    // ── Internal ──────────────────────────────────────────────────────────
 
     static void collectFromFile(@NotNull PsiFile file,
                                 @NotNull Set<PsiFile> out,
@@ -101,12 +105,13 @@ public class SliccProtocolIndex {
             if (rel == null) continue;
             PsiFile included = resolveRelative(file, rel);
             if (included != null) collectFromFile(included, out, visitedPaths);
+            else System.err.println("[SLICC-IDX] cannot resolve include '" + rel
+                    + "' from " + (vf != null ? vf.getName() : file.getName()));
         }
     }
 
     @Nullable
-    static PsiFile resolveRelative(@NotNull PsiFile from,
-                                   @NotNull String relativePath) {
+    static PsiFile resolveRelative(@NotNull PsiFile from, @NotNull String relativePath) {
         VirtualFile vf = from.getVirtualFile();
         if (vf == null) return null;
         VirtualFile dir = vf.getParent();

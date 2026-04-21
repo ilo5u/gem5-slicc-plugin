@@ -812,7 +812,11 @@ public class SliccParser implements PsiParser, LightPsiParser {
                 || t == SliccTokenTypes.KW_NETWORK || t == SliccTokenTypes.KW_VIRTUAL_NETWORK
                 || t == SliccTokenTypes.KW_VNET_TYPE || t == SliccTokenTypes.KW_RANK
                 || t == SliccTokenTypes.KW_INTERFACE || t == SliccTokenTypes.KW_EXTERNAL
-                || t == SliccTokenTypes.KW_PRIMITIVE || t == SliccTokenTypes.KW_ORDERED;
+                || t == SliccTokenTypes.KW_PRIMITIVE || t == SliccTokenTypes.KW_ORDERED
+                || t == SliccTokenTypes.KW_TEMPLATE || t == SliccTokenTypes.KW_CONSTRUCTOR
+                || t == SliccTokenTypes.KW_NON_OBJ || t == SliccTokenTypes.KW_IMPLICIT_CTOR
+                || t == SliccTokenTypes.KW_BUFFER || t == SliccTokenTypes.KW_INPORT
+                || t == SliccTokenTypes.KW_OUTPORT;
     }
 
     /**

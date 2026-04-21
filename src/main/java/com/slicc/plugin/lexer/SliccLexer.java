@@ -70,6 +70,13 @@ public class SliccLexer extends LexerBase {
         KEYWORDS.put("external",        SliccTokenTypes.KW_EXTERNAL);
         KEYWORDS.put("primitive",       SliccTokenTypes.KW_PRIMITIVE);
         KEYWORDS.put("ordered",         SliccTokenTypes.KW_ORDERED);
+        KEYWORDS.put("template",        SliccTokenTypes.KW_TEMPLATE);
+        KEYWORDS.put("constructor",     SliccTokenTypes.KW_CONSTRUCTOR);
+        KEYWORDS.put("non_obj",         SliccTokenTypes.KW_NON_OBJ);
+        KEYWORDS.put("implicit_ctor",   SliccTokenTypes.KW_IMPLICIT_CTOR);
+        KEYWORDS.put("buffer",          SliccTokenTypes.KW_BUFFER);
+        KEYWORDS.put("inport",          SliccTokenTypes.KW_INPORT);
+        KEYWORDS.put("outport",         SliccTokenTypes.KW_OUTPORT);
     }
 
     private CharSequence myBuffer;
