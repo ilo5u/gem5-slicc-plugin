@@ -27,8 +27,8 @@ Language support for `.sm` and `.slicc` files used in the
 
 ### Prerequisites
 
-- JDK 17+
-- Gradle 8+ (or use the included Gradle wrapper once you add it)
+- JDK 21+
+- Gradle wrapper (see `GET_WRAPPER_JAR.md` for setup before first build)
 - Internet access (Gradle downloads the IntelliJ SDK on first build)
 
 ```bash
@@ -39,7 +39,7 @@ cd slicc-plugin
 
 The distributable ZIP will be at:
 ```
-build/distributions/slicc-plugin-1.0.0.zip
+build/distributions/slicc-plugin-1.0.1.zip
 ```
 
 ### Running in a sandbox IDE (for testing)
@@ -53,7 +53,7 @@ build/distributions/slicc-plugin-1.0.0.zip
 ## Installing in CLion / IntelliJ IDEA
 
 1. Go to **Settings → Plugins → ⚙ → Install Plugin from Disk…**
-2. Select `build/distributions/slicc-plugin-1.0.0.zip`
+2. Select `build/distributions/slicc-plugin-1.0.1.zip`
 3. Restart the IDE
 4. Open any `.sm` or `.slicc` file — highlighting activates immediately
 
@@ -131,16 +131,6 @@ slicc-plugin/
 
 ## Extending the Plugin
 
-### Adding cross-file reference resolution
-
-`SliccReference.resolve()` currently only searches the current file.
-To resolve across `include` directives:
-
-1. In `SliccReference.resolve()`, detect if the target file is an `include`
-2. Use `PsiManager.findFile()` with the virtual-file resolved relative to
-   the current file's parent directory
-3. Recurse into the found file's declarations
-
 ### Adding rename refactoring
 
 Override `SliccNamedElement.setName()` to use `PsiElement.replace()` with a
@@ -155,6 +145,6 @@ in `plugin.xml` as `<lang.formatter language="SLICC" …/>`.
 
 ## Tested With
 
-- IntelliJ IDEA 2024.1 / CLion 2024.1
+- CLion 2026.1
 - gem5 SLICC files from Ruby (MSI, MESI, MOESI, custom protocols)
-- JDK 17 (Amazon Corretto and Oracle)
+- JDK 21

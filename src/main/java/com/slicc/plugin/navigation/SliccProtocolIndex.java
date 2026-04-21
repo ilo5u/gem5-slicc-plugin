@@ -22,49 +22,51 @@ public class SliccProtocolIndex {
 
     @NotNull
     public static Set<PsiFile> globalFiles(@NotNull Project project) {
-        PsiManager manager = PsiManager.getInstance(project);
-        for (VirtualFile vf : FileTypeIndex.getFiles(
-                SliccFileType.INSTANCE, GlobalSearchScope.allScope(project))) {
-            if (GLOBAL_ROOT.equals(vf.getName())) {
-                PsiFile root = manager.findFile(vf);
-                if (root != null) {
-                    Set<PsiFile> result = new LinkedHashSet<>();
-                    collectFromFile(root, result, new HashSet<>());
-                    System.err.println("[SLICC-IDX] globalFiles size=" + result.size()
-                            + " files=" + result.stream().map(f ->
-                                    f.getVirtualFile() != null ? f.getVirtualFile().getName() : f.getName())
-                            .toList());
-                    return result;
+        try {
+            PsiManager manager = PsiManager.getInstance(project);
+            for (VirtualFile vf : FileTypeIndex.getFiles(
+                    SliccFileType.INSTANCE, GlobalSearchScope.allScope(project))) {
+                if (GLOBAL_ROOT.equals(vf.getName())) {
+                    PsiFile root = manager.findFile(vf);
+                    if (root != null) {
+                        Set<PsiFile> result = new LinkedHashSet<>();
+                        collectFromFile(root, result, new HashSet<>());
+                        return result;
+                    }
                 }
             }
+        } catch (Exception e) {
+            System.err.println("[SLICC-IDX] globalFiles error: " + e);
         }
-        System.err.println("[SLICC-IDX] globalFiles: EMPTY (RubySlicc_interfaces.slicc not found)");
         return Collections.emptySet();
     }
 
+    /**
+     * Returns the set of files that belong to the same protocol as {@code file}.
+     * Falls back to the file itself (plus its includes) when the file is not
+     * reachable from any .slicc root — e.g. when the project index is not yet ready.
+     */
     @NotNull
     public static Set<PsiFile> groupContaining(@NotNull PsiFile file) {
         VirtualFile fileVf = file.getVirtualFile();
-        if (fileVf == null) {
-            System.err.println("[SLICC-IDX] groupContaining: file has no VirtualFile: " + file.getName());
-            return fallback(file);
-        }
+        if (fileVf == null) return fallback(file);
+
         String filePath = fileVf.getPath();
         Project project = file.getProject();
 
-        for (Set<PsiFile> group : allProtocolGroups(project)) {
-            for (PsiFile member : group) {
-                VirtualFile memberVf = member.getVirtualFile();
-                if (memberVf != null && filePath.equals(memberVf.getPath())) {
-                    System.err.println("[SLICC-IDX] groupContaining('"
-                            + fileVf.getName() + "'): found group size=" + group.size());
-                    return group;
+        try {
+            for (Set<PsiFile> group : allProtocolGroups(project)) {
+                for (PsiFile member : group) {
+                    VirtualFile memberVf = member.getVirtualFile();
+                    if (memberVf != null && filePath.equals(memberVf.getPath())) {
+                        return group;
+                    }
                 }
             }
+        } catch (Exception e) {
+            System.err.println("[SLICC-IDX] groupContaining error for "
+                    + fileVf.getName() + ": " + e);
         }
-
-        System.err.println("[SLICC-IDX] groupContaining('"
-                + fileVf.getName() + "'): NOT IN ANY GROUP -> fallback");
         return fallback(file);
     }
 

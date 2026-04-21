@@ -3,7 +3,6 @@ package com.slicc.plugin.navigation;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.patterns.PlatformPatterns;
 import com.intellij.psi.*;
-import com.intellij.psi.impl.source.tree.LeafPsiElement;
 import com.intellij.util.ProcessingContext;
 import com.slicc.plugin.lang.SliccLanguage;
 import com.slicc.plugin.lexer.SliccTokenTypes;
@@ -16,10 +15,10 @@ public class SliccReferenceContributor extends PsiReferenceContributor {
     @Override
     public void registerReferenceProviders(@NotNull PsiReferenceRegistrar registrar) {
 
-        // NO withLanguage filter — check language manually inside the provider
-        // to avoid false negatives from language instance mismatch
+        // Match any PSI element with IDENTIFIER token type in the SLICC language.
+        // Avoid restricting to LeafPsiElement.class — the exact class varies by platform version.
         registrar.registerReferenceProvider(
-                PlatformPatterns.psiElement(LeafPsiElement.class)
+                PlatformPatterns.psiElement()
                         .withElementType(SliccTokenTypes.IDENTIFIER),
                 new PsiReferenceProvider() {
                     @NotNull

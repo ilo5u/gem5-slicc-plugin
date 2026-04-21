@@ -43,6 +43,8 @@
 
         <gotoSymbolContributor implementation="com.slicc.plugin.navigation.SliccGotoSymbolContributor"/>
 
+        <gotoDeclarationHandler implementation="com.slicc.plugin.navigation.SliccGotoDeclarationHandler"/>
+
         <lang.psiStructureViewFactory language="SLICC"
                                       implementationClass="com.slicc.plugin.navigation.SliccStructureViewFactory"/>
 

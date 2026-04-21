@@ -7,6 +7,7 @@ import com.slicc.plugin.psi.*;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import com.intellij.openapi.progress.ProcessCanceledException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -14,19 +15,19 @@ import java.util.Set;
 public class SliccReference extends PsiReferenceBase<PsiElement> {
 
     private final String myKey;
-    // Whether this reference is on a type-name position (inside TYPE_REF node)
     private final boolean myIsTypeRef;
 
     public SliccReference(@NotNull PsiElement element) {
         super(element, new TextRange(0, element.getTextLength()));
         myKey = element.getText();
-        // Determine if this IDENTIFIER is inside a TYPE_REF node
-        boolean isTypeRef = false;
-        if (element.getParent() instanceof SliccCompositeElement p
-                && p.getNode().getElementType() == SliccTypes.TYPE_REF) {
-            isTypeRef = true;
-        }
-        myIsTypeRef = isTypeRef;
+        myIsTypeRef = isInTypeRefPosition(element);
+    }
+
+    /** Returns true if this identifier is used as a type name (inside a TYPE_REF node). */
+    private static boolean isInTypeRefPosition(@NotNull PsiElement element) {
+        PsiElement parent = element.getParent();
+        return parent instanceof SliccCompositeElement p
+                && p.getNode().getElementType() == SliccTypes.TYPE_REF;
     }
 
     @Nullable
@@ -34,30 +35,43 @@ public class SliccReference extends PsiReferenceBase<PsiElement> {
     public PsiElement resolve() {
         PsiFile file = myElement.getContainingFile();
         if (file == null) {
-            System.err.println("[SLICC-RESOLVE] key='" + myKey + "' FAIL: no containing file");
+            System.err.println("[SLICC-RESOLVE] key='" + myKey + "' getContainingFile() is null");
             return null;
         }
-        var project = file.getProject();
+        System.err.println("[SLICC-RESOLVE] resolving key='" + myKey + "' isTypeRef=" + myIsTypeRef
+                + " in " + file.getName());
 
+        // 1. Always search the containing file first — no index required.
+        PsiElement result = searchInFile(file, "self");
+        if (result != null) return result;
+
+        // 2. Protocol scope
         try {
-            // 1. Protocol scope
             Set<PsiFile> protocolGroup = SliccProtocolIndex.groupContaining(file);
-            PsiElement result = searchInFiles(protocolGroup, "protocol");
-            if (result != null) return result;
-
-            // 2. Global scope
-            Set<PsiFile> globalFiles = SliccProtocolIndex.globalFiles(project);
-            System.err.println("[SLICC-RESOLVE] key='" + myKey + "' trying globalFiles size=" + globalFiles.size());
-            result = searchInFiles(globalFiles, "global");
-            if (result == null) {
-                System.err.println("[SLICC-RESOLVE] key='" + myKey + "' NOT FOUND anywhere");
+            for (PsiFile f : protocolGroup) {
+                result = searchInFile(f, "protocol");
+                if (result != null) return result;
             }
-            return result;
+        } catch (ProcessCanceledException e) {
+            throw e;
         } catch (Exception e) {
-            System.err.println("[SLICC-RESOLVE] key='" + myKey + "' EXCEPTION: " + e);
-            e.printStackTrace(System.err);
-            return null;
+            System.err.println("[SLICC-RESOLVE] key='" + myKey + "' group lookup error: " + e);
         }
+
+        // 3. Global scope
+        try {
+            Set<PsiFile> globalFiles = SliccProtocolIndex.globalFiles(file.getProject());
+            for (PsiFile f : globalFiles) {
+                result = searchInFile(f, "global");
+                if (result != null) return result;
+            }
+        } catch (ProcessCanceledException e) {
+            throw e;
+        } catch (Exception e) {
+            System.err.println("[SLICC-RESOLVE] key='" + myKey + "' global lookup error: " + e);
+        }
+        System.err.println("[SLICC-RESOLVE] key='" + myKey + "' NOT FOUND in any scope");
+        return null;
     }
 
     @NotNull
@@ -81,34 +95,38 @@ public class SliccReference extends PsiReferenceBase<PsiElement> {
     // ── helpers ──────────────────────────────────────────────────────────
 
     @Nullable
-    private PsiElement searchInFiles(Set<PsiFile> files, String scope) {
-        for (PsiFile f : files) {
-            String fname = "<unknown>";
-            try {
-                fname = f.getVirtualFile() != null ? f.getVirtualFile().getName() : f.getName();
-                // Choose declaration list based on context:
-                // TYPE_REF positions → search type declarations first, then others
-                // Expression positions → search all declarations
-                List<SliccNamedElement> decls = myIsTypeRef
-                        ? collectTypeDeclarations(f)
-                        : collectAllDeclarations(f);
-                for (SliccNamedElement decl : decls) {
-                    String name = null;
-                    try { name = decl.getName(); } catch (Exception e) {
-                        System.err.println("[SLICC-RESOLVE] getName() exception in " + fname
-                                + " on " + decl.getClass().getSimpleName() + ": " + e);
-                    }
-                    if (myKey.equals(name)) {
-                        System.err.println("[SLICC-RESOLVE] key='" + myKey + "' FOUND in "
-                                + scope + " scope: " + decl.getClass().getSimpleName()
-                                + " in " + fname);
-                        return decl;
-                    }
+    private PsiElement searchInFile(PsiFile f, String scope) {
+        String fname = f.getVirtualFile() != null ? f.getVirtualFile().getName() : f.getName();
+        try {
+            List<SliccNamedElement> decls = myIsTypeRef
+                    ? collectTypeDeclarations(f)
+                    : collectAllDeclarations(f);
+            System.err.println("[SLICC-RESOLVE] key='" + myKey + "' searching " + fname
+                    + " (" + scope + "), found " + decls.size() + " decls");
+            for (SliccNamedElement decl : decls) {
+                String name;
+                try {
+                    name = decl.getName();
+                } catch (ProcessCanceledException e) {
+                    throw e;
+                } catch (Exception e) {
+                    System.err.println("[SLICC-RESOLVE] getName() exception on "
+                            + decl.getClass().getSimpleName() + " in " + fname + ": " + e);
+                    continue;
                 }
-            } catch (Exception e) {
-                System.err.println("[SLICC-RESOLVE] key='" + myKey + "' exception in file "
-                        + fname + ": " + e);
+                if (myKey.equals(name)) {
+                    System.err.println("[SLICC-RESOLVE] key='" + myKey + "' FOUND in "
+                            + scope + ": " + decl.getClass().getSimpleName() + " in " + fname);
+                    // Return the name identifier for precise navigation; fall back to decl.
+                    PsiElement nameId = decl.getNameIdentifier();
+                    return nameId != null ? nameId : decl;
+                }
             }
+        } catch (ProcessCanceledException e) {
+            throw e;
+        } catch (Exception e) {
+            System.err.println("[SLICC-RESOLVE] key='" + myKey
+                    + "' exception in file " + fname + ": " + e);
         }
         return null;
     }
