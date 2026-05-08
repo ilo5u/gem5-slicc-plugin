@@ -2,4 +2,4 @@
 build/
 template/
 # Local build configuration — may contain machine-specific paths
-gradle.properties
+# gradle.properties
