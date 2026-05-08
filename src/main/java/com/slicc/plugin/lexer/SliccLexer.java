@@ -31,34 +31,24 @@ public class SliccLexer extends LexerBase {
         KEYWORDS.put("transition",         SliccTokenTypes.KW_TRANSITION);
         KEYWORDS.put("include",            SliccTokenTypes.KW_INCLUDE);
         KEYWORDS.put("protocol",           SliccTokenTypes.KW_PROTOCOL);
-        KEYWORDS.put("global",             SliccTokenTypes.KW_GLOBAL);
 
         KEYWORDS.put("void",              SliccTokenTypes.KW_VOID);
         KEYWORDS.put("if",               SliccTokenTypes.KW_IF);
         KEYWORDS.put("else",             SliccTokenTypes.KW_ELSE);
-        KEYWORDS.put("for",              SliccTokenTypes.KW_FOR);
-        KEYWORDS.put("while",            SliccTokenTypes.KW_WHILE);
         KEYWORDS.put("return",           SliccTokenTypes.KW_RETURN);
-        KEYWORDS.put("new",              SliccTokenTypes.KW_NEW);
         KEYWORDS.put("static_cast",      SliccTokenTypes.KW_STATIC_CAST);
-        KEYWORDS.put("true",             SliccTokenTypes.KW_TRUE);
-        KEYWORDS.put("false",            SliccTokenTypes.KW_FALSE);
 
         KEYWORDS.put("peek",             SliccTokenTypes.KW_PEEK);
+        KEYWORDS.put("new",              SliccTokenTypes.KW_NEW);
         KEYWORDS.put("enqueue",          SliccTokenTypes.KW_ENQUEUE);
+        KEYWORDS.put("dequeue",          SliccTokenTypes.KW_DEQUEUE);
         KEYWORDS.put("trigger",          SliccTokenTypes.KW_TRIGGER);
         KEYWORDS.put("stall_and_wait",   SliccTokenTypes.KW_STALL_AND_WAIT);
-        KEYWORDS.put("wakeup_port",      SliccTokenTypes.KW_WAKEUP_PORT);
         KEYWORDS.put("check_allocate",   SliccTokenTypes.KW_CHECK_ALLOCATE);
-        KEYWORDS.put("check_stop_slots", SliccTokenTypes.KW_CHECK_STOP_SLOTS);
-        KEYWORDS.put("error",            SliccTokenTypes.KW_ERROR);
-        KEYWORDS.put("assert",           SliccTokenTypes.KW_ASSERT);
         KEYWORDS.put("DPRINTF",          SliccTokenTypes.KW_DPRINTF);
-        KEYWORDS.put("DEBUG_EXPR",       SliccTokenTypes.KW_DEBUG_EXPR);
-        KEYWORDS.put("set_cache_entry",  SliccTokenTypes.KW_SET_CACHE_ENTRY);
-        KEYWORDS.put("unset_cache_entry",SliccTokenTypes.KW_UNSET_CACHE_ENTRY);
-        KEYWORDS.put("set_tbe",          SliccTokenTypes.KW_SET_TBE);
-        KEYWORDS.put("unset_tbe",        SliccTokenTypes.KW_UNSET_TBE);
+        KEYWORDS.put("is_valid",         SliccTokenTypes.KW_IS_VALID);
+        KEYWORDS.put("is_invalid",       SliccTokenTypes.KW_IS_INVALID);
+        KEYWORDS.put("isReady",          SliccTokenTypes.KW_IS_READY);
 
         KEYWORDS.put("desc",            SliccTokenTypes.KW_DESC);
         KEYWORDS.put("default",         SliccTokenTypes.KW_DEFAULT);
@@ -66,6 +56,7 @@ public class SliccLexer extends LexerBase {
         KEYWORDS.put("virtual_network", SliccTokenTypes.KW_VIRTUAL_NETWORK);
         KEYWORDS.put("vnet_type",       SliccTokenTypes.KW_VNET_TYPE);
         KEYWORDS.put("rank",            SliccTokenTypes.KW_RANK);
+        KEYWORDS.put("return_by_pointer", SliccTokenTypes.KW_RETURN_BY_POINTER);
         KEYWORDS.put("interface",       SliccTokenTypes.KW_INTERFACE);
         KEYWORDS.put("external",        SliccTokenTypes.KW_EXTERNAL);
         KEYWORDS.put("primitive",       SliccTokenTypes.KW_PRIMITIVE);

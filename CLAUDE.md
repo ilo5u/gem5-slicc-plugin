@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Prerequisites:**
 - JDK 21+
 - `gradle/wrapper/gradle-wrapper.jar` must exist (not committed — see `GET_WRAPPER_JAR.md` for setup)
-- CLion 2026.1 installed locally (configured at `C:/Users/chengxin/AppData/Local/Programs/CLion`)
+- CLion 2026.1 installed locally (set `ide.localPath` in `gradle.properties` — see README)
 
 ```bash
 # Build the plugin zip

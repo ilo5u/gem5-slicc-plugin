@@ -34,7 +34,7 @@ public class SliccSyntaxHighlighter extends SyntaxHighlighterBase {
     // Built-in SLICC statements (peek, enqueue, trigger, stall_and_wait ...)
     public static final TextAttributesKey BUILTIN_STMT =
             createTextAttributesKey("SLICC_BUILTIN_STMT",
-                    DefaultLanguageHighlighterColors.FUNCTION_CALL);
+                    DefaultLanguageHighlighterColors.PREDEFINED_SYMBOL);
 
     // Attribute/qualifier keywords (desc, default, network, rank ...)
     public static final TextAttributesKey ATTRIBUTE_KEYWORD =
@@ -128,6 +128,11 @@ public class SliccSyntaxHighlighter extends SyntaxHighlighterBase {
             createTextAttributesKey("SLICC_FUNCTION_NAME",
                     DefaultLanguageHighlighterColors.FUNCTION_DECLARATION);
 
+    /** Used at function/action call sites (distinct from the declaration name). */
+    public static final TextAttributesKey FUNCTION_CALL =
+            createTextAttributesKey("SLICC_FUNCTION_CALL",
+                    DefaultLanguageHighlighterColors.FUNCTION_CALL);
+
     /**
      * Used for structure/TBE member variable names:
      * state, address, DataBlk, v, d, e, pos, allocated_list, …
@@ -140,6 +145,11 @@ public class SliccSyntaxHighlighter extends SyntaxHighlighterBase {
     public static final TextAttributesKey TRANSITION_LABEL =
             createTextAttributesKey("SLICC_TRANSITION_LABEL",
                     DefaultLanguageHighlighterColors.LABEL);
+
+    /** Implicit action/in_port variables: tbe, cache_entry, address */
+    public static final TextAttributesKey IMPLICIT_VAR =
+            createTextAttributesKey("SLICC_IMPLICIT_VAR",
+                    DefaultLanguageHighlighterColors.PREDEFINED_SYMBOL);
 
     // ...... Highlighter .....................................................................................................................................................................
 
@@ -165,42 +175,32 @@ public class SliccSyntaxHighlighter extends SyntaxHighlighterBase {
                 || type == SliccTokenTypes.KW_ACTION
                 || type == SliccTokenTypes.KW_TRANSITION
                 || type == SliccTokenTypes.KW_INCLUDE
-                || type == SliccTokenTypes.KW_PROTOCOL
-                || type == SliccTokenTypes.KW_GLOBAL) {
+                || type == SliccTokenTypes.KW_PROTOCOL) {
             return pack(DECL_KEYWORD);
         }
         // Control-flow keywords
         if (type == SliccTokenTypes.KW_IF
                 || type == SliccTokenTypes.KW_ELSE
-                || type == SliccTokenTypes.KW_FOR
-                || type == SliccTokenTypes.KW_WHILE
-                || type == SliccTokenTypes.KW_RETURN
-                || type == SliccTokenTypes.KW_NEW) {
+                || type == SliccTokenTypes.KW_RETURN) {
             return pack(CONTROL_KEYWORD);
         }
-        // Type keywords + bool literals
-        if (type == SliccTokenTypes.KW_VOID
-                || type == SliccTokenTypes.KW_TRUE
-                || type == SliccTokenTypes.KW_FALSE) {
+        // Type keywords
+        if (type == SliccTokenTypes.KW_VOID) {
             return pack(TYPE_KEYWORD);
         }
         // SLICC built-in statement keywords
         if (type == SliccTokenTypes.KW_PEEK
                 || type == SliccTokenTypes.KW_ENQUEUE
+                || type == SliccTokenTypes.KW_DEQUEUE
                 || type == SliccTokenTypes.KW_TRIGGER
                 || type == SliccTokenTypes.KW_STALL_AND_WAIT
-                || type == SliccTokenTypes.KW_WAKEUP_PORT
                 || type == SliccTokenTypes.KW_CHECK_ALLOCATE
-                || type == SliccTokenTypes.KW_CHECK_STOP_SLOTS
-                || type == SliccTokenTypes.KW_ERROR
-                || type == SliccTokenTypes.KW_ASSERT
                 || type == SliccTokenTypes.KW_DPRINTF
-                || type == SliccTokenTypes.KW_DEBUG_EXPR
-                || type == SliccTokenTypes.KW_SET_CACHE_ENTRY
-                || type == SliccTokenTypes.KW_UNSET_CACHE_ENTRY
-                || type == SliccTokenTypes.KW_SET_TBE
-                || type == SliccTokenTypes.KW_UNSET_TBE
-                || type == SliccTokenTypes.KW_STATIC_CAST) {
+                || type == SliccTokenTypes.KW_STATIC_CAST
+                || type == SliccTokenTypes.KW_NEW
+                || type == SliccTokenTypes.KW_IS_VALID
+                || type == SliccTokenTypes.KW_IS_INVALID
+                || type == SliccTokenTypes.KW_IS_READY) {
             return pack(BUILTIN_STMT);
         }
         // Attribute keywords
@@ -210,6 +210,7 @@ public class SliccSyntaxHighlighter extends SyntaxHighlighterBase {
                 || type == SliccTokenTypes.KW_VIRTUAL_NETWORK
                 || type == SliccTokenTypes.KW_VNET_TYPE
                 || type == SliccTokenTypes.KW_RANK
+                || type == SliccTokenTypes.KW_RETURN_BY_POINTER
                 || type == SliccTokenTypes.KW_INTERFACE
                 || type == SliccTokenTypes.KW_EXTERNAL
                 || type == SliccTokenTypes.KW_PRIMITIVE

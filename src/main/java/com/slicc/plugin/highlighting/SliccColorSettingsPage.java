@@ -16,8 +16,8 @@ public class SliccColorSettingsPage implements ColorSettingsPage {
 
     private static final AttributesDescriptor[] DESCRIPTORS = {
             new AttributesDescriptor("Declaration keywords//machine, structure, action, transition", SliccSyntaxHighlighter.DECL_KEYWORD),
-            new AttributesDescriptor("Control-flow keywords//if, else, for, while, return",         SliccSyntaxHighlighter.CONTROL_KEYWORD),
-            new AttributesDescriptor("Type keywords//void, bool, int, float, string",               SliccSyntaxHighlighter.TYPE_KEYWORD),
+            new AttributesDescriptor("Control-flow keywords//if, else, return",              SliccSyntaxHighlighter.CONTROL_KEYWORD),
+            new AttributesDescriptor("Type keywords//void",                                   SliccSyntaxHighlighter.TYPE_KEYWORD),
             new AttributesDescriptor("Built-in statements//peek, enqueue, trigger, stall_and_wait", SliccSyntaxHighlighter.BUILTIN_STMT),
             new AttributesDescriptor("Attribute keywords//desc, default, network, rank",            SliccSyntaxHighlighter.ATTRIBUTE_KEYWORD),
             new AttributesDescriptor("Comments//Line comment",                                      SliccSyntaxHighlighter.LINE_COMMENT),
@@ -35,9 +35,11 @@ public class SliccColorSettingsPage implements ColorSettingsPage {
             new AttributesDescriptor("Semantic//Enum / state member value (Load, Store, I, LM, …)",      SliccSyntaxHighlighter.ENUM_MEMBER_VALUE),
             new AttributesDescriptor("Semantic//Action name",                                      SliccSyntaxHighlighter.ACTION_NAME),
             new AttributesDescriptor("Semantic//Function / method name",                           SliccSyntaxHighlighter.FUNCTION_NAME),
+            new AttributesDescriptor("Semantic//Function / method call",                           SliccSyntaxHighlighter.FUNCTION_CALL),
             new AttributesDescriptor("Semantic//Structure field / member name",                    SliccSyntaxHighlighter.FIELD_NAME),
             new AttributesDescriptor("Semantic//Function name",                                    SliccSyntaxHighlighter.FUNCTION_NAME),
             new AttributesDescriptor("Semantic//Transition label",                                 SliccSyntaxHighlighter.TRANSITION_LABEL),
+            new AttributesDescriptor("Semantic//Built-in action variables (tbe, cache_entry, address)", SliccSyntaxHighlighter.IMPLICIT_VAR),
     };
 
     @Nullable @Override public Icon getIcon() { return SliccIcons.FILE; }

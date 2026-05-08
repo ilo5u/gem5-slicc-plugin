@@ -28,21 +28,21 @@ public class SliccCompletionContributor extends CompletionContributor {
     private static final List<String> DECL_KEYWORDS = List.of(
             "machine", "structure", "enumeration", "external_type",
             "state_declaration", "in_port", "out_port",
-            "action", "transition", "include", "global"
+            "action", "transition", "include"
     );
 
     private static final List<String> CONTROL_KEYWORDS = List.of(
-            "if", "else", "for", "while", "return", "new"
+            "if", "else", "return"
     );
 
     private static final List<String> TYPE_KEYWORDS = List.of(
-            "void", "bool", "int", "float", "string", "true", "false"
+            "void", "bool", "int", "float", "string"
     );
 
     private static final List<String> BUILTIN_STMTS = List.of(
-            "peek", "enqueue", "trigger", "stall_and_wait", "wakeup_port",
-            "check_allocate", "check_stop_slots", "error", "assert",
-            "DPRINTF", "DEBUG_EXPR",
+            "peek", "enqueue", "dequeue", "trigger", "stall_and_wait",
+            "check_allocate", "error", "assert",
+            "DPRINTF",
             "set_cache_entry", "unset_cache_entry", "set_tbe", "unset_tbe"
     );
 

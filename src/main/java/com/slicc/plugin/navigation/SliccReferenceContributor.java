@@ -32,27 +32,33 @@ public class SliccReferenceContributor extends PsiReferenceContributor {
                             return PsiReference.EMPTY_ARRAY;
                         }
 
-                        String text = element.getText();
-                        System.err.println("[SLICC-LEAF] called for: '" + text + "'");
-
                         // On the declaration name: self-reference
                         if (element.getParent() instanceof SliccNamedElement named
                                 && element.equals(named.getNameIdentifier())) {
-                            System.err.println("[SLICC-LEAF] self-ref on decl name: '" + text + "'");
-                            return new PsiReference[]{new PsiReferenceBase<PsiElement>(element,
+                            return new PsiReference[]{new PsiReferenceBase<>(element,
                                     new TextRange(0, element.getTextLength())) {
                                 @Override
                                 public @Nullable PsiElement resolve() { return named; }
                             }};
                         }
 
-                        // Skip REFERENCE nodes (function name markers)
+                        // Skip REFERENCE nodes (function name markers) —
+                        // but if the grandparent is a named element and this is its
+                        // name identifier, return a self-reference so Find Usages works.
                         if (element.getParent() instanceof SliccCompositeElement parent
                                 && parent.getNode().getElementType() == SliccTypes.REFERENCE) {
+                            PsiElement grandParent = parent.getParent();
+                            if (grandParent instanceof SliccNamedElement named
+                                    && element.equals(named.getNameIdentifier())) {
+                                return new PsiReference[]{new PsiReferenceBase<>(element,
+                                        new TextRange(0, element.getTextLength())) {
+                                    @Override
+                                    public @Nullable PsiElement resolve() { return named; }
+                                }};
+                            }
                             return PsiReference.EMPTY_ARRAY;
                         }
 
-                        System.err.println("[SLICC-LEAF] attach SliccReference: '" + text + "'");
                         return new PsiReference[]{new SliccReference(element)};
                     }
                 });

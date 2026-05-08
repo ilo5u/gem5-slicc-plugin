@@ -18,37 +18,29 @@ public interface SliccTokenTypes {
     IElementType KW_TRANSITION       = new SliccTokenType("transition");
     IElementType KW_INCLUDE          = new SliccTokenType("include");
     IElementType KW_PROTOCOL         = new SliccTokenType("protocol");
-    IElementType KW_GLOBAL           = new SliccTokenType("global");
-
     // ...... C++ compatible keywords .................................................................................................................................
     IElementType KW_VOID             = new SliccTokenType("void");
     IElementType KW_IF               = new SliccTokenType("if");
     IElementType KW_ELSE             = new SliccTokenType("else");
-    IElementType KW_FOR              = new SliccTokenType("for");
-    IElementType KW_WHILE            = new SliccTokenType("while");
     IElementType KW_RETURN           = new SliccTokenType("return");
-    IElementType KW_NEW              = new SliccTokenType("new");
     IElementType KW_STATIC_CAST      = new SliccTokenType("static_cast");
-    IElementType KW_NULL_KWORD       = new SliccTokenType("OOD_NULL");  // OOD = out of declaration
-    IElementType KW_TRUE             = new SliccTokenType("true");
-    IElementType KW_FALSE            = new SliccTokenType("false");
 
     // ...... SLICC built-in functions / statements .......................................................................................
+    IElementType KW_NEW              = new SliccTokenType("new");
     IElementType KW_PEEK             = new SliccTokenType("peek");
     IElementType KW_ENQUEUE          = new SliccTokenType("enqueue");
+    IElementType KW_DEQUEUE          = new SliccTokenType("dequeue");
     IElementType KW_TRIGGER          = new SliccTokenType("trigger");
     IElementType KW_STALL_AND_WAIT   = new SliccTokenType("stall_and_wait");
-    IElementType KW_WAKEUP_PORT      = new SliccTokenType("wakeup_port");
     IElementType KW_CHECK_ALLOCATE   = new SliccTokenType("check_allocate");
-    IElementType KW_CHECK_STOP_SLOTS = new SliccTokenType("check_stop_slots");
-    IElementType KW_ERROR            = new SliccTokenType("error");
-    IElementType KW_ASSERT           = new SliccTokenType("assert");
     IElementType KW_DPRINTF          = new SliccTokenType("DPRINTF");
-    IElementType KW_DEBUG_EXPR       = new SliccTokenType("DEBUG_EXPR");
     IElementType KW_SET_CACHE_ENTRY  = new SliccTokenType("set_cache_entry");
     IElementType KW_UNSET_CACHE_ENTRY= new SliccTokenType("unset_cache_entry");
     IElementType KW_SET_TBE          = new SliccTokenType("set_tbe");
     IElementType KW_UNSET_TBE        = new SliccTokenType("unset_tbe");
+    IElementType KW_IS_VALID         = new SliccTokenType("is_valid");
+    IElementType KW_IS_INVALID       = new SliccTokenType("is_invalid");
+    IElementType KW_IS_READY         = new SliccTokenType("isReady");
 
     // ...... Attribute / qualifier keywords ............................................................................................................
     IElementType KW_DESC             = new SliccTokenType("desc");
@@ -57,6 +49,7 @@ public interface SliccTokenTypes {
     IElementType KW_VIRTUAL_NETWORK  = new SliccTokenType("virtual_network");
     IElementType KW_VNET_TYPE        = new SliccTokenType("vnet_type");
     IElementType KW_RANK             = new SliccTokenType("rank");
+    IElementType KW_RETURN_BY_POINTER= new SliccTokenType("return_by_pointer");
     IElementType KW_INTERFACE        = new SliccTokenType("interface");
     IElementType KW_EXTERNAL         = new SliccTokenType("external");
     IElementType KW_PRIMITIVE        = new SliccTokenType("primitive");

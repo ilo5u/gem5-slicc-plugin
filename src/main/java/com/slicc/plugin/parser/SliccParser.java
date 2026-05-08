@@ -63,9 +63,15 @@ public class SliccParser implements PsiParser, LightPsiParser {
         if (tt == SliccTokenTypes.KW_EXTERNAL_TYPE) return parseExternalTypeDecl(b);
         if (tt == SliccTokenTypes.KW_INCLUDE)       return parseIncludeDecl(b);
         if (tt == SliccTokenTypes.KW_STATE_DECLARATION) return parseStateDecl(b);
-        if (tt == SliccTokenTypes.KW_GLOBAL)        return parseStructureDecl(b);
+        if (tt == SliccTokenTypes.IDENTIFIER && "global".equals(b.getTokenText())) return parseStructureDecl(b);
+        if (tt == SliccTokenTypes.KW_IN_PORT)       return parseInPortDecl(b);
+        if (tt == SliccTokenTypes.KW_OUT_PORT)      return parseOutPortDecl(b);
+        if (tt == SliccTokenTypes.KW_ACTION)        return parseActionDecl(b);
+        if (tt == SliccTokenTypes.KW_TRANSITION)    return parseTransitionDecl(b);
         // free-standing function
         if (isFunctionStart(b))                     return parseFunctionDecl(b);
+        // top-level field declaration (e.g. MachineID machineID; in RubySlicc_Defines.sm)
+        if (isFieldStart(b))                        return parseFieldOrVar(b);
         return false;
     }
 
@@ -124,7 +130,8 @@ public class SliccParser implements PsiParser, LightPsiParser {
         while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_LBRACE) {
             int before = b.getCurrentOffset();
             IElementType tt = b.getTokenType();
-            if (tt == SliccTokenTypes.KW_STRUCTURE || tt == SliccTokenTypes.KW_GLOBAL) {
+            if (tt == SliccTokenTypes.KW_STRUCTURE
+                    || (tt == SliccTokenTypes.IDENTIFIER && "global".equals(b.getTokenText()))) {
                 parseStructureDecl(b);
             } else if (tt == SliccTokenTypes.KW_ENUMERATION) {
                 parseEnumerationDecl(b);
@@ -485,6 +492,7 @@ public class SliccParser implements PsiParser, LightPsiParser {
         expectToken(b, SliccTokenTypes.OP_LPAREN, "'('");
         parseParamList(b);
         expectToken(b, SliccTokenTypes.OP_RPAREN, "')'");
+        parseAttrList(b); // optional , return_by_pointer = "yes" etc.
         if (b.getTokenType() == SliccTokenTypes.OP_SEMICOLON) {
             b.advanceLexer(); // forward declaration
         } else {
@@ -501,7 +509,7 @@ public class SliccParser implements PsiParser, LightPsiParser {
             Marker p = b.mark();
             parseTypeOrIdent(b);
             if (b.getTokenType() == SliccTokenTypes.IDENTIFIER) parseIdent(b);
-            p.done(SliccTypes.PARAM);
+            p.done(SliccTypes.FIELD_DECL); // params as FIELD_DECL so searchLocalScope finds them
             if (b.getTokenType() == SliccTokenTypes.OP_COMMA) b.advanceLexer();
             if (b.getCurrentOffset() == before) b.advanceLexer(); // safety
         }
@@ -540,8 +548,7 @@ public class SliccParser implements PsiParser, LightPsiParser {
     private void parseAttrValue(PsiBuilder b) {
         IElementType t = b.getTokenType();
         if (t == SliccTokenTypes.STRING_LITERAL || t == SliccTokenTypes.INTEGER_LITERAL
-                || t == SliccTokenTypes.FLOAT_LITERAL
-                || t == SliccTokenTypes.KW_TRUE || t == SliccTokenTypes.KW_FALSE) {
+                || t == SliccTokenTypes.FLOAT_LITERAL) {
             b.advanceLexer();
         } else if (t == SliccTokenTypes.IDENTIFIER || isTypeKeyword(t)) {
             // Could be a plain identifier, or a qualified value like AccessPermission:Read_Only
@@ -579,31 +586,13 @@ public class SliccParser implements PsiParser, LightPsiParser {
         if (tt == SliccTokenTypes.KW_IF) { parseIfStmt(b); return true; }
         if (tt == SliccTokenTypes.KW_ELSE) { b.advanceLexer(); parseBlock(b); return true; }
         if (tt == SliccTokenTypes.KW_RETURN) { parseReturnStmt(b); return true; }
-        if (tt == SliccTokenTypes.KW_FOR)  { parseForStmt(b); return true; }
-        if (tt == SliccTokenTypes.KW_WHILE){ parseWhileStmt(b); return true; }
         // peek / enqueue / stall_and_wait / check_allocate
         if (tt == SliccTokenTypes.KW_PEEK
                 || tt == SliccTokenTypes.KW_ENQUEUE
+                || tt == SliccTokenTypes.KW_DEQUEUE
                 || tt == SliccTokenTypes.KW_STALL_AND_WAIT
-                || tt == SliccTokenTypes.KW_CHECK_ALLOCATE
-                || tt == SliccTokenTypes.KW_CHECK_STOP_SLOTS) {
+                || tt == SliccTokenTypes.KW_CHECK_ALLOCATE) {
             parseBuiltinStmt(b); return true;
-        }
-        // assert / error
-        if (tt == SliccTokenTypes.KW_ASSERT || tt == SliccTokenTypes.KW_ERROR) {
-            parseBuiltinStmt(b); return true;
-        }
-        // DPRINTF / DEBUG_EXPR
-        if (tt == SliccTokenTypes.KW_DPRINTF || tt == SliccTokenTypes.KW_DEBUG_EXPR) {
-            parseBuiltinStmt(b); return true;
-        }
-        if (tt == SliccTokenTypes.KW_SET_CACHE_ENTRY || tt == SliccTokenTypes.KW_UNSET_CACHE_ENTRY
-                || tt == SliccTokenTypes.KW_SET_TBE || tt == SliccTokenTypes.KW_UNSET_TBE) {
-            parseBuiltinStmt(b); return true;
-        }
-        // static_cast<Type>(expr); — treated as an expression statement
-        if (tt == SliccTokenTypes.KW_STATIC_CAST) {
-            parseExprOrDeclStmt(b); return true;
         }
         // variable declaration or expression statement
         if (tt == SliccTokenTypes.IDENTIFIER || isTypeKeyword(tt)) {
@@ -639,30 +628,6 @@ public class SliccParser implements PsiParser, LightPsiParser {
         m.done(SliccTypes.STATEMENT);
     }
 
-    private void parseForStmt(PsiBuilder b) {
-        Marker m = b.mark();
-        b.advanceLexer(); // 'for'
-        if (b.getTokenType() == SliccTokenTypes.OP_LPAREN) {
-            b.advanceLexer();
-            parseExpressionUntil(b, SliccTokenTypes.OP_RPAREN);
-            if (b.getTokenType() == SliccTokenTypes.OP_RPAREN) b.advanceLexer();
-        }
-        parseBlock(b);
-        m.done(SliccTypes.STATEMENT);
-    }
-
-    private void parseWhileStmt(PsiBuilder b) {
-        Marker m = b.mark();
-        b.advanceLexer(); // 'while'
-        if (b.getTokenType() == SliccTokenTypes.OP_LPAREN) {
-            b.advanceLexer();
-            parseExpressionUntil(b, SliccTokenTypes.OP_RPAREN);
-            if (b.getTokenType() == SliccTokenTypes.OP_RPAREN) b.advanceLexer();
-        }
-        parseBlock(b);
-        m.done(SliccTypes.STATEMENT);
-    }
-
     private void parseBuiltinStmt(PsiBuilder b) {
         Marker m = b.mark();
         b.advanceLexer(); // keyword
@@ -682,10 +647,29 @@ public class SliccParser implements PsiParser, LightPsiParser {
 
     private void parseExprOrDeclStmt(PsiBuilder b) {
         // Could be: Type var := expr;  OR  expr;
+        if (isLocalVarDecl(b)) {
+            parseFieldOrVar(b); // emits FIELD_DECL so searchLocalScope can find it
+            return;
+        }
         Marker m = b.mark();
         parseExpressionUntil(b, SliccTokenTypes.OP_SEMICOLON);
         if (b.getTokenType() == SliccTokenTypes.OP_SEMICOLON) b.advanceLexer();
         m.done(SliccTypes.STATEMENT);
+    }
+
+    /** True if the current position looks like `Type varName` (local variable declaration). */
+    private boolean isLocalVarDecl(PsiBuilder b) {
+        if (b.getTokenType() != SliccTokenTypes.IDENTIFIER && !isTypeKeyword(b.getTokenType())) return false;
+        Marker la = b.mark();
+        boolean result = false;
+        try {
+            b.advanceLexer(); // skip type name
+            while (b.getTokenType() == SliccTokenTypes.OP_STAR) b.advanceLexer(); // skip pointer *
+            result = b.getTokenType() == SliccTokenTypes.IDENTIFIER;
+        } finally {
+            la.rollbackTo();
+        }
+        return result;
     }
 
     // ......... Expression (permissive, stops at a terminator) ..................................................................
@@ -811,6 +795,7 @@ public class SliccParser implements PsiParser, LightPsiParser {
         return t == SliccTokenTypes.KW_DESC || t == SliccTokenTypes.KW_DEFAULT
                 || t == SliccTokenTypes.KW_NETWORK || t == SliccTokenTypes.KW_VIRTUAL_NETWORK
                 || t == SliccTokenTypes.KW_VNET_TYPE || t == SliccTokenTypes.KW_RANK
+                || t == SliccTokenTypes.KW_RETURN_BY_POINTER
                 || t == SliccTokenTypes.KW_INTERFACE || t == SliccTokenTypes.KW_EXTERNAL
                 || t == SliccTokenTypes.KW_PRIMITIVE || t == SliccTokenTypes.KW_ORDERED
                 || t == SliccTokenTypes.KW_TEMPLATE || t == SliccTokenTypes.KW_CONSTRUCTOR

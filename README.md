@@ -1,25 +1,36 @@
 # SLICC / gem5 Ruby Language Plugin for CLion / IntelliJ IDEA
 
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+
 Language support for `.sm` and `.slicc` files used in the
 [gem5](https://www.gem5.org) Ruby memory-subsystem cache coherence framework.
 
 ---
 
-## Features
+## Implemented Features
 
 | Feature | Detail |
 |---------|--------|
-| **Syntax highlighting** | Declaration keywords (`machine`, `structure`, `action`, `transition`, …), control flow, type keywords, built-in SLICC statements (`peek`, `enqueue`, `trigger`, `stall_and_wait`, …), attribute keywords, comments, strings, numbers |
-| **Semantic highlighting** | Machine / structure / enumeration names highlighted as class names; action / function names as function declarations |
-| **Go-to-Declaration** | `Ctrl+Click` (or `Ctrl+B`) on any identifier jumps to its definition |
-| **Find Usages** | `Alt+F7` on any named declaration finds all reference sites |
+| **Syntax highlighting** | Declaration keywords (`machine`, `structure`, `action`, `transition`, …), control flow, type keywords, built-in SLICC statements (`peek`, `enqueue`, `dequeue`, `trigger`, `stall_and_wait`, `new`, `isReady`, …), attribute keywords, comments, strings, numbers |
+| **Semantic highlighting** | Machine / structure / enumeration names highlighted as class names; action / function names as function declarations; enum members as constants; structure fields as instance fields; implicit variables (`tbe`, `cache_entry`, `address`) as predefined symbols |
+| **Go-to-Declaration** | `Ctrl+Click` (or `Ctrl+B`) on any identifier jumps to its definition, with overload-aware resolution for functions |
 | **Go to Symbol** | `Ctrl+Alt+Shift+N` to search for any action, function, machine, or type by name |
+| **Find Usages** | `Alt+F7` on any named declaration finds all reference sites |
 | **Auto-completion** | All SLICC keywords, gem5 built-in types, and file-local symbols (actions, functions, structures, enumerations) |
 | **Structure View** | `Alt+7` shows a tree: machine → in_ports, out_ports, actions, transitions, functions |
 | **Code Folding** | `machine`, `in_port`, `action`, and free-standing function bodies can be collapsed |
 | **Brace Matching** | Auto-pair and highlight matching `{ }`, `( )`, `[ ]` |
 | **Comment Toggle** | `Ctrl+/` for line comment, `Ctrl+Shift+/` for block comment |
 | **Colour Customisation** | Settings → Editor → Color Scheme → **SLICC (gem5 Ruby)** |
+| **Cross-file resolution** | Identifiers resolve across all files in the same protocol directory, plus global declarations in `RubySlicc_interfaces.slicc` |
+
+## Not Yet Implemented
+
+- **Rename refactoring** (`Shift+F6`) — `SliccNamedElement.setName()` is not implemented; renaming a symbol does not update all usages.
+- **Code formatter** — No `FormattingModelBuilder`; auto-indent and reformat (`Ctrl+Alt+L`) are not available.
+- **Error / warning annotations** — The plugin does not perform type checking or report undefined references as errors.
+- **Inlay hints** — Parameter name hints and type hints are not shown.
+- **Live templates** — No built-in code snippets for common SLICC patterns.
 
 ---
 
@@ -28,23 +39,29 @@ Language support for `.sm` and `.slicc` files used in the
 ### Prerequisites
 
 - JDK 21+
-- Gradle wrapper (see `GET_WRAPPER_JAR.md` for setup before first build)
-- Internet access (Gradle downloads the IntelliJ SDK on first build)
+- `gradle/wrapper/gradle-wrapper.jar` (not committed — see [`GET_WRAPPER_JAR.md`](GET_WRAPPER_JAR.md))
+- Internet access on first build (Gradle downloads the IntelliJ SDK automatically)
+
+### Optional: use a local IDE installation
+
+By default, CLion 2026.1 is downloaded automatically. To use a locally installed
+IDE instead (faster builds), add the following to `gradle.properties` in the
+project root (this file is gitignored — do not commit it):
+
+```properties
+ide.localPath=/path/to/CLion
+# Windows example: ide.localPath=C:/Program Files/JetBrains/CLion 2026.1
+# macOS example:   ide.localPath=/Applications/CLion.app/Contents
+```
+
+### Build commands
 
 ```bash
-# Clone / place the plugin sources, then:
-cd slicc-plugin
+# Build the distributable plugin ZIP
 ./gradlew buildPlugin
-```
+# Output: build/distributions/slicc-plugin-1.0.1.zip
 
-The distributable ZIP will be at:
-```
-build/distributions/slicc-plugin-1.0.1.zip
-```
-
-### Running in a sandbox IDE (for testing)
-
-```bash
+# Launch a sandboxed IDE with the plugin loaded (primary way to test)
 ./gradlew runIde
 ```
 
@@ -83,7 +100,6 @@ slicc-plugin/
     │   ├── psi/
     │   │   ├── SliccFile.java              # Root PSI file node
     │   │   ├── SliccCompositeElement.java  # Base composite PSI node
-    │   │   ├── SliccElementType.java       # Element type wrapper
     │   │   ├── SliccTypes.java             # All composite node type constants
     │   │   ├── SliccNamedElement.java      # Base for all named declarations
     │   │   ├── SliccMachineDecl.java
@@ -111,40 +127,33 @@ slicc-plugin/
     │   │   ├── SliccReference.java         # Resolves identifiers → declarations
     │   │   ├── SliccReferenceContributor.java
     │   │   ├── SliccFindUsagesProvider.java
+    │   │   ├── SliccGotoDeclarationHandler.java
     │   │   ├── SliccGotoSymbolContributor.java
+    │   │   ├── SliccProtocolIndex.java
     │   │   └── SliccStructureViewFactory.java
     │   └── icons/
     │       └── SliccIcons.java
     └── resources/
         ├── META-INF/plugin.xml
         └── icons/
-            ├── slicc_file.svg
-            ├── slicc_machine.svg
-            ├── slicc_structure.svg
-            ├── slicc_action.svg
-            ├── slicc_transition.svg
-            ├── slicc_function.svg
-            └── slicc_enum.svg
 ```
 
 ---
 
-## Extending the Plugin
+## Contributing
 
-### Adding rename refactoring
+Bug reports, feature requests, and pull requests are welcome.
 
-Override `SliccNamedElement.setName()` to use `PsiElement.replace()` with a
-freshly-created leaf node containing the new name.
+- **Report a bug or request a feature**: [Open an issue](../../issues)
+- **Known limitations**: See the "Not Yet Implemented" section above
 
-### Adding a formatter
-
-Implement `com.intellij.lang.formatter.FormattingModelBuilder` and register it
-in `plugin.xml` as `<lang.formatter language="SLICC" …/>`.
+When reporting a bug, please include:
+- The IDE version (CLion / IntelliJ IDEA)
+- A minimal `.sm` or `.slicc` snippet that reproduces the problem
+- What you expected vs. what actually happened
 
 ---
 
-## Tested With
+## License
 
-- CLion 2026.1
-- gem5 SLICC files from Ruby (MSI, MESI, MOESI, custom protocols)
-- JDK 21
+This project is licensed under the [Apache License 2.0](LICENSE).
