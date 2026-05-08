@@ -1,0 +1,61 @@
+<idea-plugin>
+    <id>com.slicc.plugin</id>
+    <name>SLICC / gem5 Ruby Language Support</name>
+    <vendor email="slicc@gem5.org" url="https://www.gem5.org">gem5 Community</vendor>
+
+    <description><![CDATA[
+        Language support for SLICC (.sm and .slicc files) used in gem5 Ruby memory subsystem.
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <idea-version since-build="261"/>
+
+    <extensions defaultExtensionNs="com.intellij">
+
+        <fileType name="SLICC File"
+                  implementationClass="com.slicc.plugin.lang.SliccFileType"
+                  fieldName="INSTANCE"
+                  language="SLICC"
+                  extensions="sm;slicc"/>
+
+        <lang.parserDefinition language="SLICC"
+                               implementationClass="com.slicc.plugin.parser.SliccParserDefinition"/>
+
+        <lang.syntaxHighlighterFactory language="SLICC"
+                                       implementationClass="com.slicc.plugin.highlighting.SliccSyntaxHighlighterFactory"/>
+
+        <colorSettingsPage implementation="com.slicc.plugin.highlighting.SliccColorSettingsPage"/>
+
+        <annotator language="SLICC"
+                   implementationClass="com.slicc.plugin.highlighting.SliccAnnotator"/>
+
+        <lang.foldingBuilder language="SLICC"
+                             implementationClass="com.slicc.plugin.highlighting.SliccFoldingBuilder"/>
+
+        <completion.contributor language="SLICC"
+                                implementationClass="com.slicc.plugin.completion.SliccCompletionContributor"/>
+
+        <psi.referenceContributor language="SLICC"
+                                  implementation="com.slicc.plugin.navigation.SliccReferenceContributor"/>
+
+        <lang.findUsagesProvider language="SLICC"
+                                 implementationClass="com.slicc.plugin.navigation.SliccFindUsagesProvider"/>
+
+        <gotoSymbolContributor implementation="com.slicc.plugin.navigation.SliccGotoSymbolContributor"/>
+
+        <gotoDeclarationHandler implementation="com.slicc.plugin.navigation.SliccGotoDeclarationHandler"/>
+
+        <lang.psiStructureViewFactory language="SLICC"
+                                      implementationClass="com.slicc.plugin.navigation.SliccStructureViewFactory"/>
+
+        <lang.commenter language="SLICC"
+                        implementationClass="com.slicc.plugin.lang.SliccCommenter"/>
+
+        <lang.braceMatcher language="SLICC"
+                           implementationClass="com.slicc.plugin.lang.SliccBraceMatcher"/>
+
+
+        <postStartupActivity implementation="com.slicc.plugin.lang.SliccStartupDiagnostic"/>
+
+    </extensions>
+</idea-plugin>
