@@ -35,6 +35,12 @@
         <completion.contributor language="SLICC"
                                 implementationClass="com.slicc.plugin.completion.SliccCompletionContributor"/>
 
+        <codeInsight.parameterInfo language="SLICC"
+                                   implementationClass="com.slicc.plugin.completion.SliccParameterInfoHandler"/>
+
+        <typedHandler implementationClass="com.slicc.plugin.completion.SliccTypedHandler"
+                      id="SliccTypedHandler"/>
+
         <psi.referenceContributor language="SLICC"
                                   implementation="com.slicc.plugin.navigation.SliccReferenceContributor"/>
 

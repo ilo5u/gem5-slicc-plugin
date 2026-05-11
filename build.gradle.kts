@@ -1,10 +1,10 @@
 plugins {
     id("java")
-    id("org.jetbrains.intellij.platform") version "2.14.0"
+    id("org.jetbrains.intellij.platform") version "2.16.0"
 }
 
 group = "com.slicc"
-version = "1.0.1"
+version = "1.1.0"
 
 repositories {
     mavenCentral()
@@ -23,6 +23,7 @@ dependencies {
         if (localPath != null) {
             local(localPath)
         } else {
+            // Change to rider("2026.1") if you only have Rider installed
             clion("2026.1")
         }
         plugin("com.github.catppuccin.jetbrains", "3.6.0")

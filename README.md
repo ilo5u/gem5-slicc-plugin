@@ -16,7 +16,9 @@ Language support for `.sm` and `.slicc` files used in the
 | **Go-to-Declaration** | `Ctrl+Click` (or `Ctrl+B`) on any identifier jumps to its definition, with overload-aware resolution for functions |
 | **Go to Symbol** | `Ctrl+Alt+Shift+N` to search for any action, function, machine, or type by name |
 | **Find Usages** | `Alt+F7` on any named declaration finds all reference sites |
-| **Auto-completion** | All SLICC keywords, gem5 built-in types, and file-local symbols (actions, functions, structures, enumerations) |
+| **Auto-completion** | All SLICC keywords, gem5 built-in types, and file-local symbols (actions, functions, structures, enumerations); dot-triggered member completion (`tbe.`, `in_msg.`, `someVar.`) shows fields and functions of the resolved type |
+| **Parameter info** | `Ctrl+P` (or auto-popup on `(`) shows all overloads of a function with parameter types; current argument position is highlighted |
+| **Unresolved identifier errors** | Identifiers that cannot be resolved to any declaration are underlined in red |
 | **Structure View** | `Alt+7` shows a tree: machine → in_ports, out_ports, actions, transitions, functions |
 | **Code Folding** | `machine`, `in_port`, `action`, and free-standing function bodies can be collapsed |
 | **Brace Matching** | Auto-pair and highlight matching `{ }`, `( )`, `[ ]` |
@@ -28,7 +30,7 @@ Language support for `.sm` and `.slicc` files used in the
 
 - **Rename refactoring** (`Shift+F6`) — `SliccNamedElement.setName()` is not implemented; renaming a symbol does not update all usages.
 - **Code formatter** — No `FormattingModelBuilder`; auto-indent and reformat (`Ctrl+Alt+L`) are not available.
-- **Error / warning annotations** — The plugin does not perform type checking or report undefined references as errors.
+- **Type-aware member error checking** — Dot-access RHS (e.g. `tbe.nonexistent`) is not checked; only top-level identifier resolution is validated.
 - **Inlay hints** — Parameter name hints and type hints are not shown.
 - **Live templates** — No built-in code snippets for common SLICC patterns.
 
@@ -59,7 +61,7 @@ ide.localPath=/path/to/CLion
 ```bash
 # Build the distributable plugin ZIP
 ./gradlew buildPlugin
-# Output: build/distributions/slicc-plugin-1.0.1.zip
+# Output: build/distributions/slicc-plugin-1.1.0.zip
 
 # Launch a sandboxed IDE with the plugin loaded (primary way to test)
 ./gradlew runIde
@@ -119,10 +121,12 @@ slicc-plugin/
     │   │   ├── SliccSyntaxHighlighter.java
     │   │   ├── SliccSyntaxHighlighterFactory.java
     │   │   ├── SliccColorSettingsPage.java
-    │   │   ├── SliccAnnotator.java         # Semantic highlighting
+    │   │   ├── SliccAnnotator.java         # Semantic highlighting + unresolved identifier errors
     │   │   └── SliccFoldingBuilder.java
     │   ├── completion/
-    │   │   └── SliccCompletionContributor.java
+    │   │   ├── SliccCompletionContributor.java  # Keyword, symbol, dot-member completion
+    │   │   ├── SliccParameterInfoHandler.java   # Ctrl+P parameter info popup
+    │   │   └── SliccTypedHandler.java           # Auto-popup on '('
     │   ├── navigation/
     │   │   ├── SliccReference.java         # Resolves identifiers → declarations
     │   │   ├── SliccReferenceContributor.java
