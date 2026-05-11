@@ -38,7 +38,7 @@ Source file → Lexer → Parser → PSI Tree → Annotator / Reference / Comple
 
 4. **Highlighting** (`highlighting/`)
    - `SliccSyntaxHighlighter` — lexical/keyword colors
-   - `SliccAnnotator` — semantic colors (machine names → class color, enum names → interface color, resolved type refs → colored)
+   - `SliccAnnotator` — semantic colors (machine names → class color, enum names → interface color, resolved type refs → colored); also reports **unresolved identifier errors** (red underline) for identifiers that cannot be resolved. False-positive guards: dot-access RHS, C++ scoped names (`std::string`), DPRINTF first arg, auto-generated machine symbols (`{MachineName}_*`), implicit vars (`tbe`, `cache_entry`, `address`, `in_msg`, `out_msg`).
    - `SliccFoldingBuilder` — code folding for machine/in_port/action/function bodies
 
 5. **Navigation & Resolution** (`navigation/`)
@@ -47,7 +47,10 @@ Source file → Lexer → Parser → PSI Tree → Annotator / Reference / Comple
    - `SliccGotoSymbolContributor` — Ctrl+Alt+Shift+N symbol search
    - `SliccStructureViewFactory` — Alt+7 structure tree (machine → in_ports, out_ports, actions, transitions, functions)
 
-6. **Completion** (`completion/SliccCompletionContributor.java`) — Keyword completions + symbol completions (file-local actions/functions/structures + gem5 built-in types: `Addr`, `DataBlock`, `MachineID`, …).
+6. **Completion** (`completion/`)
+   - `SliccCompletionContributor` — Keyword completions + symbol completions (file-local actions/functions/structures + gem5 built-in types). Dot-triggered member completion: when the cursor is after `.`, resolves the owner's type and shows only its fields and member functions (suppresses keyword/symbol completions). Action names are suppressed inside action bodies.
+   - `SliccParameterInfoHandler` — `Ctrl+P` parameter info popup; shows all overloads with parameter types, highlights the current argument. Registered as `codeInsight.parameterInfo` (not `lang.parameterInfo`).
+   - `SliccTypedHandler` — Auto-triggers the parameter info popup when `(` is typed, via `invokeLater` + `PsiDocumentManager.commitDocument`.
 
 ### Cross-File Resolution Design
 
@@ -59,9 +62,10 @@ Two-tier scope resolution in `SliccProtocolIndex`:
 
 ### Registration
 
-All extensions are registered in `src/main/resources/META-INF/plugin.xml` (fileType, parser definition, syntax highlighter, annotator, folding builder, completion contributor, reference contributor, structure view, goto symbol contributor, color settings page).
+All extensions are registered in `src/main/resources/META-INF/plugin.xml` (fileType, parser definition, syntax highlighter, annotator, folding builder, completion contributor, parameter info handler, typed handler, reference contributor, structure view, goto symbol contributor, color settings page).
 
 ## Key Extension Points (Not Yet Implemented)
 
 - **Rename refactoring**: `SliccNamedElement.setName()` needs implementation.
 - **Code formatting**: Needs a `FormattingModelBuilder`.
+- **Type-aware member error checking**: Dot-access RHS (e.g. `tbe.nonexistent`) is not validated; only top-level identifier resolution is checked.

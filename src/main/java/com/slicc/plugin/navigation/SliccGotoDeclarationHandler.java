@@ -323,6 +323,137 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         return args.size();
     }
 
+    // ── Public API for completion ─────────────────────────────────────────
+
+    /**
+     * Given the ASTNode of the identifier before a dot, returns its resolved type name
+     * (e.g. "TBE", "InternalMsg"), or null if the type cannot be determined.
+     */
+    @Nullable
+    public static String resolveOwnerTypeForCompletion(
+            @org.jetbrains.annotations.NotNull com.intellij.lang.ASTNode ownerNode,
+            @org.jetbrains.annotations.NotNull PsiElement context,
+            @org.jetbrains.annotations.Nullable PsiFile originalFile) {
+        return resolveNodeType(ownerNode, context, originalFile);
+    }
+
+    // Keep old overload for non-completion callers
+    public static String resolveOwnerTypeForCompletion(
+            @org.jetbrains.annotations.NotNull com.intellij.lang.ASTNode ownerNode,
+            @org.jetbrains.annotations.NotNull PsiElement context) {
+        return resolveNodeType(ownerNode, context, null);
+    }
+
+    /**
+     * Returns all SliccFunctionDecl overloads with the given name visible from {@code file}.
+     * Searches machine scope, protocol group, global scope, and all project files.
+     */
+    @org.jetbrains.annotations.NotNull
+    public static List<SliccFunctionDecl> collectFunctionOverloads(
+            @org.jetbrains.annotations.NotNull String name,
+            @org.jetbrains.annotations.NotNull PsiFile file) {
+        List<SliccFunctionDecl> result = new ArrayList<>();
+        List<PsiFile> searchFiles = collectSearchFiles(file);
+        try { searchFiles.addAll(SliccProtocolIndex.allProjectFiles(file.getProject())); }
+        catch (Exception ignored) {}
+        java.util.Set<PsiFile> seen = new java.util.LinkedHashSet<>(searchFiles);
+        for (PsiFile f : seen) {
+            for (SliccFunctionDecl fn : PsiTreeUtil.collectElementsOfType(f, SliccFunctionDecl.class)) {
+                if (!name.equals(fn.getName())) continue;
+                // Only top-level functions (not member functions inside structure/external_type)
+                PsiElement parent = fn.getParent();
+                if (parent instanceof SliccStructureDecl || parent instanceof SliccExternalTypeDecl) continue;
+                result.add(fn);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Returns all SliccFunctionDecl overloads with the given name that are members of
+     * the structure/external_type named {@code typeName}.
+     */
+    @org.jetbrains.annotations.NotNull
+    public static List<SliccFunctionDecl> collectMemberFunctionOverloads(
+            @org.jetbrains.annotations.NotNull String typeName,
+            @org.jetbrains.annotations.NotNull String funcName,
+            @org.jetbrains.annotations.NotNull PsiFile file) {
+        List<SliccFunctionDecl> result = new ArrayList<>();
+        java.util.Set<PsiFile> seen = new java.util.LinkedHashSet<>(collectSearchFiles(file));
+        try { seen.addAll(SliccProtocolIndex.allProjectFiles(file.getProject())); }
+        catch (Exception ignored) {}
+        for (PsiFile f : seen) {
+            for (SliccStructureDecl s : PsiTreeUtil.collectElementsOfType(f, SliccStructureDecl.class)) {
+                if (!typeName.equals(s.getName())) continue;
+                for (PsiElement ch : s.getChildren()) {
+                    if (ch instanceof SliccFunctionDecl fn && funcName.equals(fn.getName()))
+                        result.add(fn);
+                }
+            }
+            for (SliccExternalTypeDecl s : PsiTreeUtil.collectElementsOfType(f, SliccExternalTypeDecl.class)) {
+                if (!typeName.equals(s.getName())) continue;
+                for (PsiElement ch : s.getChildren()) {
+                    if (ch instanceof SliccFunctionDecl fn && funcName.equals(fn.getName()))
+                        result.add(fn);
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * named {@code typeName}, following the interface inheritance chain.
+     * Deduplicates by name (first declaration wins).
+     */
+    @org.jetbrains.annotations.NotNull
+    public static List<SliccNamedElement> collectMembersOfType(
+            @org.jetbrains.annotations.NotNull String typeName,
+            @org.jetbrains.annotations.NotNull PsiFile file) {
+        List<SliccNamedElement> result = new ArrayList<>();
+        java.util.Set<String> seenNames = new java.util.LinkedHashSet<>();
+        java.util.Set<String> visitedTypes = new java.util.HashSet<>();
+        collectMembersRecursive(typeName, file, result, seenNames, visitedTypes);
+        return result;
+    }
+
+    private static void collectMembersRecursive(String typeName, PsiFile file,
+            List<SliccNamedElement> result, java.util.Set<String> seenNames,
+            java.util.Set<String> visitedTypes) {
+        if (!visitedTypes.add(typeName)) return;
+        List<PsiFile> searchFiles = new ArrayList<>(collectSearchFiles(file));
+        try { searchFiles.addAll(SliccProtocolIndex.allProjectFiles(file.getProject())); }
+        catch (Exception ignored) {}
+
+        String ifaceToFollow = null;
+        for (PsiFile f : searchFiles) {
+            for (SliccStructureDecl s : PsiTreeUtil.collectElementsOfType(f, SliccStructureDecl.class)) {
+                if (!typeName.equals(s.getName())) continue;
+                // Only direct children — avoids picking up function parameters (also SliccFieldDecl)
+                for (PsiElement ch : s.getChildren()) {
+                    if (ch instanceof SliccFieldDecl field) {
+                        String n = field.getName();
+                        if (n != null && seenNames.add(n)) result.add(field);
+                    } else if (ch instanceof SliccFunctionDecl fn) {
+                        String n = fn.getName();
+                        if (n != null && seenNames.add(n)) result.add(fn);
+                    }
+                }
+                if (ifaceToFollow == null) ifaceToFollow = getStructureInterface(s);
+            }
+            for (SliccExternalTypeDecl s : PsiTreeUtil.collectElementsOfType(f, SliccExternalTypeDecl.class)) {
+                if (!typeName.equals(s.getName())) continue;
+                for (PsiElement ch : s.getChildren()) {
+                    if (ch instanceof SliccFunctionDecl fn) {
+                        String n = fn.getName();
+                        if (n != null && seenNames.add(n)) result.add(fn);
+                    }
+                }
+            }
+        }
+        if (ifaceToFollow != null)
+            collectMembersRecursive(ifaceToFollow, file, result, seenNames, visitedTypes);
+    }
+
     @Nullable
     @Override
     public PsiElement[] getGotoDeclarationTargets(
@@ -590,16 +721,12 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
                 PsiElement nameId = decl.getNameIdentifier();
                 PsiElement target = nameId != null ? nameId : decl;
                 if (target == skip) continue;
-                System.err.println("[SLICC-GOTO] key='" + key + "' FOUND in " + scope
-                        + ": " + decl.getClass().getSimpleName() + " in " + fname);
                 return target;
             }
             if (fnCandidates != null) {
                 PsiElement cs = callSite != null ? callSite : skip;
                 PsiElement target = pickBestFunction(fnCandidates, argTypes, cs);
                 if (target != null && target != skip) {
-                    System.err.println("[SLICC-GOTO] key='" + key + "' FOUND fn in " + scope
-                            + " (overloads=" + fnCandidates.size() + ") in " + fname);
                     return target;
                 }
             }
@@ -737,7 +864,18 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
      */
     @Nullable
     private static String resolveNodeType(com.intellij.lang.ASTNode ownerNode, PsiElement contextElement) {
+        return resolveNodeType(ownerNode, contextElement, null);
+    }
+
+    @Nullable
+    private static String resolveNodeType(com.intellij.lang.ASTNode ownerNode, PsiElement contextElement,
+                                           @org.jetbrains.annotations.Nullable PsiFile originalFile) {
         String ownerName = ownerNode.getText();
+
+        // Prefer originalFile (real file with VirtualFile) over contextElement.getContainingFile()
+        // which may be a dummy copy during completion.
+        PsiFile effectiveFile = (originalFile != null && originalFile.getVirtualFile() != null)
+                ? originalFile : contextElement.getContainingFile();
 
         // Check if ownerNode is itself a dot-access (chained: grandOwner.ownerNode)
         com.intellij.lang.ASTNode prevDot = ownerNode.getTreePrev();
@@ -748,11 +886,9 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
             while (grandOwner != null && grandOwner.getElementType() == com.intellij.psi.TokenType.WHITE_SPACE)
                 grandOwner = grandOwner.getTreePrev();
             if (grandOwner != null && grandOwner.getElementType() == SliccTokenTypes.IDENTIFIER) {
-                String grandOwnerType = resolveNodeType(grandOwner, contextElement);
-                if (grandOwnerType != null) {
-                    PsiFile file = contextElement.getContainingFile();
-                    if (file != null) return resolveMemberType(grandOwnerType, ownerName, file);
-                }
+                String grandOwnerType = resolveNodeType(grandOwner, contextElement, originalFile);
+                if (grandOwnerType != null && effectiveFile != null)
+                    return resolveMemberType(grandOwnerType, ownerName, effectiveFile);
                 return null; // chain broken
             }
         }
@@ -765,9 +901,8 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         String msgType = resolveMessageVarType(ownerName, contextElement);
         if (msgType != null) return msgType;
 
-        PsiFile file = contextElement.getContainingFile();
-        if (file == null) return null;
-        return resolveVarType(ownerName, file);
+        if (effectiveFile == null) return null;
+        return resolveVarType(ownerName, effectiveFile);
     }
 
     /**
@@ -1123,7 +1258,114 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         return null;
     }
 
-    /** Search for a type declaration by name across all scopes. */
+    /**
+     * Public API for completion: returns all variables visible at {@code position}.
+     * Includes (in order): local vars declared before the cursor (block-scoped),
+     * function parameters (if inside a function), and machine-level fields.
+     */
+    @org.jetbrains.annotations.NotNull
+    public static List<SliccFieldDecl> collectVisibleVariables(@org.jetbrains.annotations.NotNull PsiElement position) {
+        return collectVisibleVariables(position, position.getContainingFile());
+    }
+
+    @org.jetbrains.annotations.NotNull
+    public static List<SliccFieldDecl> collectVisibleVariables(@org.jetbrains.annotations.NotNull PsiElement position,
+                                                                @org.jetbrains.annotations.Nullable PsiFile originalFile) {
+        List<SliccFieldDecl> result = new ArrayList<>();
+        java.util.Set<String> seenNames = new java.util.HashSet<>();
+
+        PsiFile fileForLookup = (originalFile != null && originalFile.getVirtualFile() != null)
+                ? originalFile : position.getContainingFile();
+
+        // 1. Local vars visible from position — walk up, collect preceding FIELD_DECL siblings in each BLOCK
+        PsiElement child = position;
+        PsiElement parent = child.getParent();
+        PsiElement scopeRoot = null;
+        while (parent != null && !(parent instanceof PsiFile)) {
+            if (parent instanceof SliccActionDecl
+                    || parent instanceof SliccFunctionDecl
+                    || parent instanceof SliccInPortDecl) {
+                scopeRoot = parent;
+                break;
+            }
+            if (parent instanceof SliccCompositeElement
+                    && parent.getNode().getElementType() == SliccTypes.BLOCK) {
+                for (PsiElement sib = parent.getFirstChild(); sib != null && sib != child; sib = sib.getNextSibling()) {
+                    if (sib instanceof SliccFieldDecl field) {
+                        String n = field.getName();
+                        if (n != null && seenNames.add(n)) result.add(field);
+                    }
+                }
+            }
+            child = parent;
+            parent = parent.getParent();
+        }
+
+        // 2. Function parameters (if inside a function or in_port)
+        if (scopeRoot instanceof SliccFunctionDecl fn) {
+            com.intellij.lang.ASTNode paramList = fn.getNode().findChildByType(SliccTypes.PARAM_LIST);
+            if (paramList != null) {
+                for (com.intellij.lang.ASTNode n = paramList.getFirstChildNode(); n != null; n = n.getTreeNext()) {
+                    if (n.getElementType() == SliccTypes.FIELD_DECL && n.getPsi() instanceof SliccFieldDecl field) {
+                        String name = field.getName();
+                        if (name != null && seenNames.add(name)) result.add(field);
+                    }
+                }
+            }
+        }
+
+        // 3. Machine-level fields — walk up to the enclosing MACHINE_DECL.
+        // If the action is in an included file, the PSI ancestor walk won't find a
+        // SliccMachineDecl, so fall back to searching machine-scope files.
+        PsiElement cur = scopeRoot != null ? scopeRoot.getParent() : position.getParent();
+        SliccMachineDecl foundMachine = null;
+        while (cur != null && !(cur instanceof PsiFile)) {
+            if (cur instanceof SliccMachineDecl machine) {
+                foundMachine = machine;
+                break;
+            }
+            cur = cur.getParent();
+        }
+        if (foundMachine != null) {            collectMachineLevelFields(foundMachine, result, seenNames);
+        } else {
+            // Cross-file fallback: action is in an included .sm file
+            PsiFile file = fileForLookup;
+            if (file != null) {
+                try {
+                    Set<PsiFile> machineFiles = SliccProtocolIndex.machineFilesContaining(file);
+                    for (PsiFile mf : machineFiles) {
+                        for (SliccMachineDecl md : PsiTreeUtil.collectElementsOfType(mf, SliccMachineDecl.class)) {
+                            collectMachineLevelFields(md, result, seenNames);
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }
+        }
+
+        return result;
+    }
+
+    private static void collectMachineLevelFields(SliccMachineDecl machine,
+                                                   List<SliccFieldDecl> result,
+                                                   java.util.Set<String> seenNames) {
+        for (PsiElement ch = machine.getFirstChild(); ch != null; ch = ch.getNextSibling()) {
+            if (ch instanceof SliccFieldDecl field) {
+                String n = field.getName();
+                if (n != null && seenNames.add(n)) result.add(field);
+            } else if (ch instanceof SliccStructureDecl struct) {
+                // Include fields from 'global { }' blocks (accessible without dot)
+                com.intellij.lang.ASTNode first = struct.getNode().getFirstChildNode();
+                if (first != null && first.getElementType() == SliccTokenTypes.IDENTIFIER
+                        && "global".equals(first.getText())) {
+                    for (SliccFieldDecl gf : PsiTreeUtil.collectElementsOfType(struct, SliccFieldDecl.class)) {
+                        String n = gf.getName();
+                        if (n != null && seenNames.add(n)) result.add(gf);
+                    }
+                }
+            }
+        }
+    }
+
     @Nullable
     private static PsiElement findTypeInAllScopes(String typeName, PsiFile file) {
         PsiElement result = searchInFile(file, typeName, true, false, null, "self", null, null);
