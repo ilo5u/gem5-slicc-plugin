@@ -12,17 +12,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 # Build the plugin zip
 ./gradlew buildPlugin
-# Output: build/distributions/slicc-plugin-1.0.1.zip
+# Output: build/distributions/slicc-plugin-<version>.zip
 
 # Launch sandboxed IDE with plugin loaded (primary way to test)
 ./gradlew runIde
 ```
 
-There is no automated test suite (`src/test/` is absent). Test manually using real gem5 Ruby SLICC files (MSI, MESI, MOESI protocols).
+There is no automated test suite (`src/test/` is absent). Test manually using `./gradlew runIde` with the sample SLICC files in `ruby/` (MI, MESI, MOESI, GPU_VIPER, Garnet protocols from gem5).
 
 ## Architecture
 
-This is an IntelliJ Platform plugin providing language support for the gem5 Ruby **SLICC** language (`.sm` / `.slicc` files).
+This is an IntelliJ Platform plugin (SDK `org.jetbrains.intellij.platform` 2.16.0, targets CLion 2026.1+) providing language support for the gem5 Ruby **SLICC** language (`.sm` / `.slicc` files).
+
+All source lives under `src/main/java/com/slicc/plugin/`.
 
 ### Component Pipeline
 
@@ -42,7 +44,8 @@ Source file → Lexer → Parser → PSI Tree → Annotator / Reference / Comple
    - `SliccFoldingBuilder` — code folding for machine/in_port/action/function bodies
 
 5. **Navigation & Resolution** (`navigation/`)
-   - `SliccReference` — resolves identifiers to declarations; searches current file then protocol-group scope
+   - `SliccReference` — resolves identifiers to declarations; searches current file → protocol-group → global scope
+   - `SliccGotoDeclarationHandler` — Ctrl+Click / Ctrl+B; overload-aware (matches call-site argument count to function parameter count)
    - `SliccProtocolIndex` — groups `.sm`/`.slicc` files by protocol directory and exposes global symbols (including via `RubySlicc_interfaces.slicc`)
    - `SliccGotoSymbolContributor` — Ctrl+Alt+Shift+N symbol search
    - `SliccStructureViewFactory` — Alt+7 structure tree (machine → in_ports, out_ports, actions, transitions, functions)
@@ -54,11 +57,14 @@ Source file → Lexer → Parser → PSI Tree → Annotator / Reference / Comple
 
 ### Cross-File Resolution Design
 
-Two-tier scope resolution in `SliccProtocolIndex`:
-- **Protocol-group scope**: files sharing the same directory are treated as one protocol unit.
-- **Global scope**: `RubySlicc_interfaces.slicc` provides globally visible built-in declarations.
+Three-tier scope resolution in `SliccReference.resolve()`:
+1. **Current file** — searched first, no index needed.
+2. **Protocol-group scope** (`SliccProtocolIndex.groupContaining`) — files reachable from the same `.slicc` root via `include` directives.
+3. **Global scope** (`SliccProtocolIndex.globalFiles`) — files reachable from `RubySlicc_interfaces.slicc`.
 
-`SliccReference.resolve()` searches type declarations first for `TYPE_REF` positions, then all declarations.
+`SliccProtocolIndex` uses `CachedValue` keyed per-file, invalidated on `PsiModificationTracker` changes. Protocol groups are built by following `include` chains from `.slicc` root files.
+
+`SliccReference.resolve()` searches type declarations first when the identifier is in a `TYPE_REF` position, then all declarations.
 
 ### Registration
 
