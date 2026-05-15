@@ -71,10 +71,19 @@ ide.localPath=/path/to/CLion
 
 ## Installing in CLion / IntelliJ IDEA
 
+### From JetBrains Marketplace (recommended)
+
+1. Go to **Settings → Plugins → Marketplace**
+2. Search for **SLICC**
+3. Click **Install**, then restart the IDE
+
+### From disk
+
 1. Go to **Settings → Plugins → ⚙ → Install Plugin from Disk…**
-2. Select `build/distributions/slicc-plugin-1.0.1.zip`
+2. Select `build/distributions/slicc-plugin-<version>.zip`
 3. Restart the IDE
-4. Open any `.sm` or `.slicc` file — highlighting activates immediately
+
+Open any `.sm` or `.slicc` file — highlighting activates immediately.
 
 ---
 
