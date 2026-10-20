@@ -9,6 +9,7 @@ import com.intellij.psi.PsiFile;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.slicc.plugin.lexer.SliccTokenTypes;
 import com.slicc.plugin.navigation.SliccProtocolIndex;
+import com.slicc.plugin.navigation.SliccMessageScope;
 import com.slicc.plugin.navigation.SliccReference;
 import com.slicc.plugin.psi.*;
 import org.jetbrains.annotations.NotNull;
@@ -82,6 +83,20 @@ public class SliccAnnotator implements Annotator {
             // Skip declaration names — already highlighted by the instanceof branches above
             if (element.getParent() instanceof SliccNamedElement named
                     && element.equals(named.getNameIdentifier())) {
+                return;
+            }
+
+            if (SliccMessageScope.isMessageVariable(text) && !isDotAccessRhs(element)
+                    && !isColonAccess(element) && !isScopeAccessPart(element)) {
+                if (SliccMessageScope.isVisible(text, element)) {
+                    highlight(element, SliccSyntaxHighlighter.IMPLICIT_VAR, holder);
+                } else {
+                    String statement = "in_msg".equals(text) ? "peek" : "enqueue";
+                    holder.newAnnotation(HighlightSeverity.ERROR,
+                                    "'" + text + "' is only available inside a " + statement + " block")
+                            .range(element)
+                            .create();
+                }
                 return;
             }
 
@@ -171,13 +186,9 @@ public class SliccAnnotator implements Annotator {
 
     private static boolean isColonAccess(@NotNull PsiElement element) {
         com.intellij.lang.ASTNode node = element.getNode();
-        com.intellij.lang.ASTNode prev = node.getTreePrev();
-        while (prev != null && prev.getElementType() == com.intellij.psi.TokenType.WHITE_SPACE)
-            prev = prev.getTreePrev();
+        com.intellij.lang.ASTNode prev = SliccPsiUtil.previousSignificantSibling(node);
         if (prev == null || prev.getElementType() != SliccTokenTypes.OP_COLON) return false;
-        com.intellij.lang.ASTNode beforeColon = prev.getTreePrev();
-        while (beforeColon != null && beforeColon.getElementType() == com.intellij.psi.TokenType.WHITE_SPACE)
-            beforeColon = beforeColon.getTreePrev();
+        com.intellij.lang.ASTNode beforeColon = SliccPsiUtil.previousSignificantSibling(prev);
         return beforeColon != null && beforeColon.getElementType() == SliccTokenTypes.IDENTIFIER;
     }
 
@@ -212,16 +223,13 @@ public class SliccAnnotator implements Annotator {
 
     private static boolean isDotAccessRhs(@NotNull PsiElement element) {
         com.intellij.lang.ASTNode node = element.getNode();
-        com.intellij.lang.ASTNode prev = node.getTreePrev();
-        while (prev != null && prev.getElementType() == com.intellij.psi.TokenType.WHITE_SPACE)
-            prev = prev.getTreePrev();
+        com.intellij.lang.ASTNode prev = SliccPsiUtil.previousSignificantSibling(node);
         return prev != null && prev.getElementType() == SliccTokenTypes.OP_DOT;
     }
 
     private static boolean isBuiltinIdentifier(@NotNull String text) {
         return switch (text) {
-            case "true", "false", "null", "NULL", "error", "assert",
-                 "in_msg", "out_msg" -> true;
+            case "true", "false", "null", "NULL", "error", "assert" -> true;
             default -> false;
         };
     }
@@ -229,13 +237,9 @@ public class SliccAnnotator implements Annotator {
     /** True if this identifier is part of a C++ scoped name (std::string, prefetch::Base). */
     private static boolean isScopeAccessPart(@NotNull PsiElement element) {
         com.intellij.lang.ASTNode node = element.getNode();
-        com.intellij.lang.ASTNode prev = node.getTreePrev();
-        while (prev != null && prev.getElementType() == com.intellij.psi.TokenType.WHITE_SPACE)
-            prev = prev.getTreePrev();
+        com.intellij.lang.ASTNode prev = SliccPsiUtil.previousSignificantSibling(node);
         if (prev != null && prev.getElementType() == SliccTokenTypes.OP_SCOPE) return true;
-        com.intellij.lang.ASTNode next = node.getTreeNext();
-        while (next != null && next.getElementType() == com.intellij.psi.TokenType.WHITE_SPACE)
-            next = next.getTreeNext();
+        com.intellij.lang.ASTNode next = SliccPsiUtil.nextSignificantSibling(node);
         return next != null && next.getElementType() == SliccTokenTypes.OP_SCOPE;
     }
 

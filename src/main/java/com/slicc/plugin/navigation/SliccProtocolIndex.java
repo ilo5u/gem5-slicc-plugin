@@ -1,6 +1,8 @@
 package com.slicc.plugin.navigation;
 
 import com.intellij.openapi.util.Key;
+import com.intellij.openapi.progress.ProcessCanceledException;
+import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiFile;
@@ -118,15 +120,27 @@ public class SliccProtocolIndex {
      */
     @NotNull
     public static Set<PsiFile> machineFilesContaining(@NotNull PsiFile file) {
+        return machineFilesContaining(file, false);
+    }
+
+    @NotNull
+    public static Set<PsiFile> allMachineFilesContaining(@NotNull PsiFile file) {
+        return machineFilesContaining(file, true);
+    }
+
+    @NotNull
+    private static Set<PsiFile> machineFilesContaining(@NotNull PsiFile file, boolean allMachines) {
         VirtualFile fileVf = file.getVirtualFile();
         if (fileVf == null) return groupContaining(file);
         String filePath = fileVf.getPath();
         Project project = file.getProject();
         PsiManager manager = PsiManager.getInstance(project);
+        Set<PsiFile> matches = new LinkedHashSet<>();
 
         try {
             for (VirtualFile vf : FileTypeIndex.getFiles(
                     SliccFileType.INSTANCE, GlobalSearchScope.allScope(project))) {
+                ProgressManager.checkCanceled();
                 if (!"sm".equalsIgnoreCase(vf.getExtension())) continue;
                 PsiFile candidate = manager.findFile(vf);
                 if (candidate == null) continue;
@@ -142,13 +156,16 @@ public class SliccProtocolIndex {
                 if (containsFile) {
                     System.err.println("[SLICC-IDX] machine scope for " + fileVf.getName()
                             + " rooted at " + vf.getName() + " (" + chain.size() + " files)");
-                    return chain;
+                    if (!allMachines) return chain;
+                    matches.addAll(chain);
                 }
             }
+        } catch (ProcessCanceledException exception) {
+            throw exception;
         } catch (Exception e) {
             System.err.println("[SLICC-IDX] machineFilesContaining error: " + e);
         }
-        return groupContaining(file);
+        return matches.isEmpty() ? groupContaining(file) : matches;
     }
 
     private static Set<PsiFile> fallback(@NotNull PsiFile file) {        Set<PsiFile> result = new LinkedHashSet<>();

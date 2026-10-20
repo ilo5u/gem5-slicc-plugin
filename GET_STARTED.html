@@ -1,0 +1,74 @@
+<h2>Get Started with SLICC / gem5 Ruby Language Support</h2>
+<p>Edit and explore gem5 Ruby cache-coherence protocols in CLion or IntelliJ IDEA. This plugin supports <code>.sm</code> and <code>.slicc</code> files; it is not a plugin for the Ruby programming language. The navigation features described below require plugin version <strong>1.2.0 or later</strong>.</p>
+
+<h3>1. Install the Plugin</h3>
+<ol>
+  <li>Open your IDE's <strong>Settings → Plugins → Marketplace</strong>.</li>
+  <li>Search for <strong>SLICC / gem5 Ruby Language Support</strong> and install an available version compatible with your IDE.</li>
+  <li>Restart the IDE if prompted.</li>
+</ol>
+<p>If you are testing a release that is not yet available on Marketplace, install its distribution ZIP using <strong>Settings → Plugins → Settings menu → Install Plugin from Disk</strong>. For a local 1.2.0 build, select <code>build/distributions/slicc-plugin-1.2.0.zip</code>. Select the plugin ZIP itself, not a source-code archive; do not extract it first.</p>
+<p>For the IDE's installation instructions, see <a href="https://www.jetbrains.com/help/idea/managing-plugins.html">Install and manage plugins</a>.</p>
+
+<h3>2. Open Your Protocol Sources</h3>
+<ol>
+  <li>Open your gem5 source checkout or protocol source directory as an IDE project.</li>
+  <li>Keep the protocol's <code>.slicc</code> root, included <code>.sm</code> files, and their relative include paths intact. Include shared interface declarations, such as <code>RubySlicc_interfaces.slicc</code> and its dependencies, in the project when available.</li>
+  <li>Wait for project indexing to finish, then open a <code>.sm</code> or <code>.slicc</code> file. Syntax highlighting should activate automatically.</li>
+</ol>
+<p>No separate language server or gem5 build is required for editor support. Cross-file assistance depends on the declarations and includes available in your project, so opening an isolated file may provide fewer results.</p>
+
+<h3>3. Try Completion and Parameter Information</h3>
+<ul>
+  <li>Type a keyword or symbol prefix and invoke the IDE's <strong>Basic Completion</strong> action. Visible free functions include declarations from machine includes, protocol files, and global interfaces. For example, <code>t</code> or <code>d</code> can suggest <code>tagLatency</code> or <code>dataLatency</code> when those functions are declared in scope.</li>
+  <li>Type <code>.</code> after a variable whose type can be resolved to see its fields and member functions.</li>
+  <li>Type <code>(</code> after a function name to see parameter information, or invoke <strong>Parameter Info</strong> with <code>Ctrl+P</code>. Overload signatures show the active argument position.</li>
+</ul>
+
+<h3>4. Navigate Between Actions, Functions, and Calls</h3>
+<p>Use <strong>Go to Declaration</strong> with <code>Ctrl+B</code> or <code>Ctrl+Click</code> on a name:</p>
+<ul>
+  <li><strong>Transition → action:</strong> select an action reference in a transition body to open its implementation.</li>
+  <li><strong>Action → transitions:</strong> select an action's declaration name to find the transitions that use it.</li>
+  <li><strong>Function call or declaration → definition:</strong> open the matching SLICC definition, including definitions in included files. If there is no SLICC definition, a call opens the declaration instead.</li>
+  <li><strong>Function definition → calling statements:</strong> select the function's definition name to find its calls inside functions and actions.</li>
+  <li><strong>Declaration-only method → calling statements:</strong> select a method name in a <code>structure</code> or <code>external_type</code> declaration when no SLICC implementation exists. Free functions without definitions support this too.</li>
+</ul>
+<p>A single matching target opens directly. Multiple targets open a chooser. Function-call candidates show the complete calling statement on one line with caller, file, and line information; selecting one opens the actual call location. Distinct statements in the same caller remain separate, while multiple calls within one statement share a candidate. Matching respects overload signatures and machine/include/type ownership.</p>
+
+<h3>5. Use Message Variables in Their Scope</h3>
+<ul>
+  <li>Inside an existing <code>peek(queue, MessageType)</code> body, use <code>in_msg</code>. Type <code>in_msg.</code> for members of the second argument's message type.</li>
+  <li>Inside an existing <code>enqueue(queue, MessageType)</code> body, use <code>out_msg</code>. Type <code>out_msg.</code> for members of that message type.</li>
+  <li>Nested blocks inherit the surrounding bindings; an inner matching statement supplies the nearest binding. Usage outside the corresponding body is reported as an error.</li>
+</ul>
+<p>Use queue and message-type names declared in your protocol; the names above illustrate the statement shape rather than a standalone protocol.</p>
+
+<h3>6. Explore the IDE Tools</h3>
+<ul>
+  <li><strong>Find Usages:</strong> <code>Alt+F7</code> on a declaration.</li>
+  <li><strong>Go to Symbol:</strong> <code>Ctrl+Alt+Shift+N</code> to search declarations by name.</li>
+  <li><strong>Structure View:</strong> <code>Alt+7</code> to browse machines, ports, actions, transitions, and functions.</li>
+  <li><strong>Comments:</strong> <code>Ctrl+/</code> for line comments and <code>Ctrl+Shift+/</code> for block comments.</li>
+  <li><strong>Colours:</strong> <strong>Settings → Editor → Color Scheme → SLICC (gem5 Ruby)</strong>.</li>
+</ul>
+<p>Shortcut examples use the default Windows/Linux keymap. If your platform or keymap differs, invoke the named IDE action or check its configured shortcut.</p>
+
+<h3>7. Optional: Adjust Call-Site Preview Length</h3>
+<p>Call-site labels show up to <strong>160 Unicode characters</strong> by default, including an ellipsis when truncated. To use a different limit:</p>
+<ol>
+  <li>Open <strong>Help → Edit Custom VM Options</strong>.</li>
+  <li>Add the following as a separate line, preserving the existing options:</li>
+</ol>
+<pre><code>-Dslicc.navigation.maxStatementLength=240</code></pre>
+<p>Save the custom options and restart the IDE. This changes only the displayed preview length, not the source statement or navigation target. Remove the option to restore the default. Do not modify the IDE's bundled default VM options file. See <a href="https://www.jetbrains.com/help/idea/tuning-the-ide.html">Configure IDE JVM options</a> for details.</p>
+
+<h3>Troubleshooting and Current Limits</h3>
+<ul>
+  <li><strong>No highlighting:</strong> confirm the plugin is enabled and the file is recognised as SLICC, rather than plain text or another file type.</li>
+  <li><strong>Missing completion or navigation:</strong> check that the declaration, include targets, and relevant protocol files are present in the project and indexing has finished. Function names are not resolved by unrestricted same-name lookup across unrelated machines.</li>
+  <li><strong>No reverse-navigation candidates:</strong> this search covers calls inside functions and actions. A declaration with a matching definition opens that definition first; an unused declaration remains its own target.</li>
+  <li><strong>Unresolved names:</strong> diagnostics are based on the plugin's available source declarations and supported resolution rules. They do not replace compiler diagnostics.</li>
+  <li>Rename refactoring, automatic formatting, inlay hints, and live templates are not implemented. Invalid member names after <code>.</code> are not currently reported as errors.</li>
+</ul>
+<p>The plugin provides language-editing support. Build protocols and run simulations using your normal gem5 workflow.</p>

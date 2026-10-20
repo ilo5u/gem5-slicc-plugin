@@ -48,6 +48,10 @@ public class SliccReferenceContributor extends PsiReferenceContributor {
                         if (element.getParent() instanceof SliccCompositeElement parent
                                 && parent.getNode().getElementType() == SliccTypes.REFERENCE) {
                             PsiElement grandParent = parent.getParent();
+                            if (grandParent instanceof SliccFunctionDecl function
+                                    && element.equals(function.getNameIdentifier())) {
+                                return new PsiReference[]{new SliccReference(element)};
+                            }
                             if (grandParent instanceof SliccNamedElement named
                                     && element.equals(named.getNameIdentifier())) {
                                 return new PsiReference[]{new PsiReferenceBase<>(element,

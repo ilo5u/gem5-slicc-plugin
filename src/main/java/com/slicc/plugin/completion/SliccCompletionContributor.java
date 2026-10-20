@@ -11,10 +11,12 @@ import com.slicc.plugin.icons.SliccIcons;
 import com.slicc.plugin.lang.SliccLanguage;
 import com.slicc.plugin.lexer.SliccTokenTypes;
 import com.slicc.plugin.navigation.SliccGotoDeclarationHandler;
+import com.slicc.plugin.navigation.SliccMessageScope;
 import com.slicc.plugin.psi.*;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
+import java.util.StringJoiner;
 
 /**
  * Code completion for SLICC files.
@@ -40,21 +42,17 @@ public class SliccCompletionContributor extends CompletionContributor {
         if (node == null) return false;
 
         // Walk back to find a dot immediately before this token
-        com.intellij.lang.ASTNode prev = node.getTreePrev();
-        while (prev != null && prev.getElementType() == com.intellij.psi.TokenType.WHITE_SPACE)
-            prev = prev.getTreePrev();
+        com.intellij.lang.ASTNode prev = SliccPsiUtil.previousSignificantSibling(node);
         if (prev == null || prev.getElementType() != SliccTokenTypes.OP_DOT) return false;
 
         // Walk back past the dot to find the owner identifier
-        com.intellij.lang.ASTNode ownerNode = prev.getTreePrev();
-        while (ownerNode != null && ownerNode.getElementType() == com.intellij.psi.TokenType.WHITE_SPACE)
-            ownerNode = ownerNode.getTreePrev();
+        com.intellij.lang.ASTNode ownerNode = SliccPsiUtil.previousSignificantSibling(prev);
         if (ownerNode == null || ownerNode.getElementType() != SliccTokenTypes.IDENTIFIER) return false;
 
         // Resolve the owner's type — pass originalFile so resolveVarType uses the real file
         PsiFile originalFile = parameters.getOriginalFile();
         String ownerType = SliccGotoDeclarationHandler.resolveOwnerTypeForCompletion(ownerNode, position, originalFile);
-        if (ownerType == null) return false;
+        if (ownerType == null) return SliccMessageScope.isMessageVariable(ownerNode.getText());
 
         // Collect and emit member completions
         PsiFile file = originalFile;
@@ -94,7 +92,7 @@ public class SliccCompletionContributor extends CompletionContributor {
                                                       @NotNull CompletionResultSet result) {
         for (SliccFieldDecl field : SliccGotoDeclarationHandler.collectVisibleVariables(position, originalFile)) {
             String name = field.getName();
-            if (name == null) continue;
+            if (name == null || SliccMessageScope.isMessageVariable(name)) continue;
             com.intellij.lang.ASTNode tr = field.getNode().findChildByType(SliccTypes.TYPE_REF);
             String typeName = "";
             if (tr != null) {
@@ -111,6 +109,14 @@ public class SliccCompletionContributor extends CompletionContributor {
 
     private static void addImplicitVarCompletions(@NotNull PsiElement position,
                                                    @NotNull CompletionResultSet result) {
+        for (String name : List.of("in_msg", "out_msg")) {
+            if (SliccMessageScope.isVisible(name, position)) {
+                result.addElement(LookupElementBuilder.create(name)
+                        .withIcon(SliccIcons.STRUCTURE)
+                        .withTypeText(SliccMessageScope.resolveType(name, position))
+                        .withBoldness(true));
+            }
+        }
         // tbe, cache_entry, address are only valid inside action bodies
         PsiElement cur = position.getParent();
         while (cur != null && !(cur instanceof com.intellij.psi.PsiFile)) {
@@ -242,12 +248,26 @@ public class SliccCompletionContributor extends CompletionContributor {
             }
         }
         // Functions
-        for (SliccFunctionDecl f : PsiTreeUtil.collectElementsOfType(file, SliccFunctionDecl.class)) {
+        for (SliccFunctionDecl f : SliccGotoDeclarationHandler.collectVisibleFunctions(file)) {
             String name = f.getName();
             if (name != null) {
-                result.addElement(LookupElementBuilder.create(name)
+                com.intellij.lang.ASTNode returnType = f.getNode().findChildByType(SliccTypes.TYPE_REF);
+                StringJoiner signature = new StringJoiner(", ", "(", ")");
+                com.intellij.lang.ASTNode parameters = f.getNode().findChildByType(SliccTypes.PARAM_LIST);
+                if (parameters != null) {
+                    for (com.intellij.lang.ASTNode parameter = parameters.getFirstChildNode();
+                         parameter != null; parameter = parameter.getTreeNext()) {
+                        if (!(parameter.getPsi() instanceof SliccFieldDecl field)) continue;
+                        com.intellij.lang.ASTNode type = parameter.findChildByType(SliccTypes.TYPE_REF);
+                        String parameterName = field.getName();
+                        signature.add((type != null ? type.getText() : "")
+                                + (parameterName != null ? " " + parameterName : ""));
+                    }
+                }
+                result.addElement(LookupElementBuilder.create(f, name)
                         .withIcon(SliccIcons.FUNCTION)
-                        .withTypeText("function")
+                        .withTypeText(returnType != null ? returnType.getText() : "function")
+                        .withTailText(signature.toString(), true)
                         .withPsiElement(f));
             }
         }

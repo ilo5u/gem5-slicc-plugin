@@ -387,7 +387,6 @@ public class SliccParser implements PsiParser, LightPsiParser {
                 parseTransitionActionBlock(b);
             }
         } else {
-            resMarker.drop();
             // it's the action block directly
             while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_RBRACE) {
                 int before = b.getCurrentOffset();
@@ -395,6 +394,7 @@ public class SliccParser implements PsiParser, LightPsiParser {
                 if (b.getCurrentOffset() == before) b.advanceLexer(); // safety
             }
             expectToken(b, SliccTokenTypes.OP_RBRACE, "'}'");
+            resMarker.done(SliccTypes.TRANSITION_ACTIONS);
         }
         transitionMarker.done(SliccTypes.TRANSITION_DECL);
     }
@@ -591,7 +591,17 @@ public class SliccParser implements PsiParser, LightPsiParser {
                 || tt == SliccTokenTypes.KW_ENQUEUE
                 || tt == SliccTokenTypes.KW_DEQUEUE
                 || tt == SliccTokenTypes.KW_STALL_AND_WAIT
-                || tt == SliccTokenTypes.KW_CHECK_ALLOCATE) {
+                || tt == SliccTokenTypes.KW_CHECK_ALLOCATE
+                || tt == SliccTokenTypes.KW_DPRINTF
+                || tt == SliccTokenTypes.KW_TRIGGER
+                || tt == SliccTokenTypes.KW_SET_CACHE_ENTRY
+                || tt == SliccTokenTypes.KW_UNSET_CACHE_ENTRY
+                || tt == SliccTokenTypes.KW_SET_TBE
+                || tt == SliccTokenTypes.KW_UNSET_TBE
+                || tt == SliccTokenTypes.KW_IS_VALID
+                || tt == SliccTokenTypes.KW_IS_INVALID
+                || tt == SliccTokenTypes.KW_IS_READY
+                || tt == SliccTokenTypes.KW_STATIC_CAST) {
             parseBuiltinStmt(b); return true;
         }
         // variable declaration or expression statement

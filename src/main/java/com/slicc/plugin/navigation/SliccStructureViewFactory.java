@@ -1,12 +1,14 @@
 package com.slicc.plugin.navigation;
 
 import com.intellij.ide.structureView.*;
-import com.intellij.ide.structureView.impl.common.PsiTreeElementBase;
-import com.intellij.ide.util.treeView.smartTree.TreeElement;
 import com.intellij.lang.PsiStructureViewFactory;
 import com.intellij.navigation.ItemPresentation;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.psi.PsiFile;
+import com.intellij.psi.PsiElement;
+import com.intellij.psi.SmartPointerManager;
+import com.intellij.psi.SmartPsiElementPointer;
+import com.intellij.pom.Navigatable;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.slicc.plugin.icons.SliccIcons;
 import com.slicc.plugin.psi.*;
@@ -19,6 +21,39 @@ import java.util.Collection;
 import java.util.List;
 
 public class SliccStructureViewFactory implements PsiStructureViewFactory {
+
+    private abstract static class SliccTreeElement<T extends PsiElement>
+            implements StructureViewTreeElement, ItemPresentation {
+        private final SmartPsiElementPointer<T> pointer;
+
+        SliccTreeElement(T element) {
+            pointer = SmartPointerManager.createPointer(element);
+        }
+
+        protected @Nullable T getElement() { return pointer.getElement(); }
+
+        @Override public @Nullable Object getValue() { return getElement(); }
+        @Override public @NotNull ItemPresentation getPresentation() { return this; }
+        @Override public @Nullable String getLocationString() { return null; }
+        @Override public @Nullable Icon getIcon(boolean open) {
+            T element = getElement();
+            return element != null ? element.getIcon(0) : null;
+        }
+        @Override public @NotNull StructureViewTreeElement[] getChildren() {
+            return getChildrenBase().toArray(StructureViewTreeElement[]::new);
+        }
+        public abstract @NotNull Collection<StructureViewTreeElement> getChildrenBase();
+
+        @Override public void navigate(boolean requestFocus) {
+            if (getElement() instanceof Navigatable navigatable) navigatable.navigate(requestFocus);
+        }
+        @Override public boolean canNavigate() {
+            return getElement() instanceof Navigatable navigatable && navigatable.canNavigate();
+        }
+        @Override public boolean canNavigateToSource() {
+            return getElement() instanceof Navigatable navigatable && navigatable.canNavigateToSource();
+        }
+    }
 
     @Override
     public @Nullable StructureViewBuilder getStructureViewBuilder(@NotNull PsiFile psiFile) {
@@ -46,7 +81,7 @@ public class SliccStructureViewFactory implements PsiStructureViewFactory {
 
     // ...... File root element ...................................................................................................................................................
 
-    private static class SliccFileTreeElement extends PsiTreeElementBase<PsiFile> {
+    private static class SliccFileTreeElement extends SliccTreeElement<PsiFile> {
         SliccFileTreeElement(PsiFile file) { super(file); }
 
         @Override public @Nullable String getPresentableText() {
@@ -84,7 +119,7 @@ public class SliccStructureViewFactory implements PsiStructureViewFactory {
     }
 
     // ...... Machine element (has children: actions, transitions, functions, ports)
-    private static class SliccMachineTreeElement extends PsiTreeElementBase<SliccMachineDecl> {
+    private static class SliccMachineTreeElement extends SliccTreeElement<SliccMachineDecl> {
         SliccMachineTreeElement(SliccMachineDecl m) { super(m); }
 
         @Override public @Nullable String getPresentableText() {
@@ -122,7 +157,7 @@ public class SliccStructureViewFactory implements PsiStructureViewFactory {
     // ...... Generic leaf element for any named declaration ...............................................................
 
     private static class NamedTreeElement<T extends SliccNamedElement>
-            extends PsiTreeElementBase<T> {
+            extends SliccTreeElement<T> {
 
         NamedTreeElement(T element) { super(element); }
 

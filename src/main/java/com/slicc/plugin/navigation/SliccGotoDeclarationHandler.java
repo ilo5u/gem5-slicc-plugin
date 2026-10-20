@@ -26,11 +26,9 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
      * Returns null if the identifier is not followed by '('.
      */
     @Nullable
-    private static List<String> extractCallArgTokens(PsiElement callName) {
+    static List<String> extractCallArgTokens(PsiElement callName) {
         com.intellij.lang.ASTNode node = callName.getNode();
-        com.intellij.lang.ASTNode next = node.getTreeNext();
-        while (next != null && next.getElementType() == com.intellij.psi.TokenType.WHITE_SPACE)
-            next = next.getTreeNext();
+        com.intellij.lang.ASTNode next = SliccPsiUtil.nextSignificantSibling(node);
         if (next == null || next.getElementType() != SliccTokenTypes.OP_LPAREN) return null;
 
         List<String> args = new ArrayList<>();
@@ -38,11 +36,12 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         int depth = 0;
         StringBuilder chain = new StringBuilder();
         boolean expectDotIdent = false;
+        boolean hasArgument = false;
         while (next != null) {
             IElementType t = next.getElementType();
-            if (t == com.intellij.psi.TokenType.WHITE_SPACE) { next = next.getTreeNext(); continue; }
+            if (SliccPsiUtil.isTrivia(next)) { next = next.getTreeNext(); continue; }
             if (t == SliccTokenTypes.OP_RPAREN && depth == 0) {
-                args.add(chain.length() > 0 ? chain.toString() : null);
+                if (hasArgument) args.add(chain.length() > 0 ? chain.toString() : null);
                 break;
             }
             if (t == SliccTokenTypes.OP_LPAREN || t == SliccTokenTypes.OP_LBRACE
@@ -53,8 +52,16 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
                 args.add(chain.length() > 0 ? chain.toString() : null);
                 chain = new StringBuilder();
                 expectDotIdent = false;
+                hasArgument = false;
             } else if (depth == 0) {
-                if (t == SliccTokenTypes.KW_NEW) {
+                if (t == SliccTokenTypes.INTEGER_LITERAL || t == SliccTokenTypes.FLOAT_LITERAL
+                        || t == SliccTokenTypes.STRING_LITERAL
+                        || "true".equals(next.getText()) || "false".equals(next.getText())) {
+                    String literalType = t == SliccTokenTypes.INTEGER_LITERAL ? "int"
+                            : t == SliccTokenTypes.FLOAT_LITERAL ? "float"
+                            : t == SliccTokenTypes.STRING_LITERAL ? "string" : "bool";
+                    if (chain.length() == 0) chain.append('#').append(literalType);
+                } else if (t == SliccTokenTypes.KW_NEW) {
                     // `new TypeName` — next identifier is the type; prime chain to accept it
                     chain = new StringBuilder("new");
                 } else if (t == SliccTokenTypes.IDENTIFIER) {
@@ -75,6 +82,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
                     expectDotIdent = false;
                 }
             }
+            if (t != SliccTokenTypes.OP_COMMA || depth != 0) hasArgument = true;
             next = next.getTreeNext();
         }
         return args;
@@ -85,21 +93,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
      * Each entry is the text of the TYPE_REF's IDENTIFIER child (e.g. "Addr", "AbstractCacheEntry").
      */
     private static List<String> getDeclParamTypes(SliccFunctionDecl fn) {
-        com.intellij.lang.ASTNode paramList = fn.getNode().findChildByType(SliccTypes.PARAM_LIST);
-        if (paramList == null) return List.of();
-        List<String> types = new ArrayList<>();
-        for (com.intellij.lang.ASTNode child = paramList.getFirstChildNode();
-             child != null; child = child.getTreeNext()) {
-            if (child.getElementType() != SliccTypes.FIELD_DECL) continue;
-            com.intellij.lang.ASTNode tr = child.findChildByType(SliccTypes.TYPE_REF);
-            if (tr != null) {
-                com.intellij.lang.ASTNode id = tr.findChildByType(SliccTokenTypes.IDENTIFIER);
-                types.add(id != null ? id.getText() : null);
-            } else {
-                types.add(null);
-            }
-        }
-        return types;
+        return fn.getParameterTypes();
     }
 
     /**
@@ -111,7 +105,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
      *   -1 if parameter count doesn't match
      *    0 if argTypes is null/empty (no info available)
      */
-    private static int scoreOverload(SliccFunctionDecl fn, List<String> argTypes,
+    static int scoreOverload(SliccFunctionDecl fn, List<String> argTypes,
                                      PsiElement callSite) {
         List<String> paramTypes = getDeclParamTypes(fn);
         if (argTypes == null) return 0;
@@ -161,8 +155,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
     private static String getDeclReturnType(SliccFunctionDecl fn) {
         com.intellij.lang.ASTNode typeRef = fn.getNode().findChildByType(SliccTypes.TYPE_REF);
         if (typeRef == null) return null;
-        com.intellij.lang.ASTNode id = typeRef.findChildByType(SliccTokenTypes.IDENTIFIER);
-        return id != null ? id.getText() : null;
+        return SliccPsiUtil.typeText(typeRef);
     }
 
     /**
@@ -256,13 +249,20 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
     /** Resolves a simple (non-dot) identifier to its type. */
     @Nullable
     private static String resolveSimpleArgType(String argName, PsiElement callSite, PsiFile file) {
+        if (argName.startsWith("#")) return argName.substring(1);
         if (isInActionBody(callSite)) {
             String implicit = IMPLICIT_VAR_TYPES.get(argName);
             if (implicit != null) return implicit;
         }
-        String msgType = resolveMessageVarType(argName, callSite);
-        if (msgType != null) return msgType;
-        String varType = resolveVarType(argName, file);
+        if (SliccMessageScope.isMessageVariable(argName)) {
+            return SliccMessageScope.resolveType(argName, callSite);
+        }
+        for (SliccFieldDecl field : collectVisibleVariables(callSite, file)) {
+            if (argName.equals(field.getName())) {
+                return SliccPsiUtil.typeText(field.getNode().findChildByType(SliccTypes.TYPE_REF));
+            }
+        }
+        String varType = resolveVarType(argName, callSite, file);
         if (varType != null) return varType;
         // If the name is itself a type (e.g. `new Entry` → argName="Entry"), return it directly
         if (isTypeName(argName, file)) return argName;
@@ -345,26 +345,28 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
     }
 
     /**
-     * Returns all SliccFunctionDecl overloads with the given name visible from {@code file}.
-     * Searches machine scope, protocol group, global scope, and all project files.
+     * Returns all free functions visible through the current file, machine includes,
+     * protocol group, and global declarations.
      */
+    @org.jetbrains.annotations.NotNull
+    public static List<SliccFunctionDecl> collectVisibleFunctions(@org.jetbrains.annotations.NotNull PsiFile file) {
+        List<SliccFunctionDecl> result = new ArrayList<>();
+        java.util.Set<PsiFile> seen = new java.util.LinkedHashSet<>(collectSearchFiles(file));
+        for (PsiFile f : seen) {
+            for (SliccFunctionDecl fn : PsiTreeUtil.collectElementsOfType(f, SliccFunctionDecl.class)) {
+                if (isTopLevel(fn)) result.add(fn);
+            }
+        }
+        return result;
+    }
+
     @org.jetbrains.annotations.NotNull
     public static List<SliccFunctionDecl> collectFunctionOverloads(
             @org.jetbrains.annotations.NotNull String name,
             @org.jetbrains.annotations.NotNull PsiFile file) {
         List<SliccFunctionDecl> result = new ArrayList<>();
-        List<PsiFile> searchFiles = collectSearchFiles(file);
-        try { searchFiles.addAll(SliccProtocolIndex.allProjectFiles(file.getProject())); }
-        catch (Exception ignored) {}
-        java.util.Set<PsiFile> seen = new java.util.LinkedHashSet<>(searchFiles);
-        for (PsiFile f : seen) {
-            for (SliccFunctionDecl fn : PsiTreeUtil.collectElementsOfType(f, SliccFunctionDecl.class)) {
-                if (!name.equals(fn.getName())) continue;
-                // Only top-level functions (not member functions inside structure/external_type)
-                PsiElement parent = fn.getParent();
-                if (parent instanceof SliccStructureDecl || parent instanceof SliccExternalTypeDecl) continue;
-                result.add(fn);
-            }
+        for (SliccFunctionDecl function : collectVisibleFunctions(file)) {
+            if (name.equals(function.getName())) result.add(function);
         }
         return result;
     }
@@ -460,7 +462,34 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
             @Nullable PsiElement sourceElement,
             int offset,
             Editor editor) {
+        if (sourceElement != null && findOwnDeclaration(sourceElement) instanceof SliccActionDecl action) {
+            SliccTransitionDecl[] transitions = SliccActionNavigation.findTransitions(action);
+            if (transitions.length > 0) return transitions;
+        }
+        if (sourceElement != null && findOwnDeclaration(sourceElement) instanceof SliccFunctionDecl function) {
+            List<SliccFunctionDecl> definitions = SliccFunctionNavigation.definitions(function);
+            if (!function.isDefinition() && definitions.stream().anyMatch(SliccFunctionDecl::isDefinition)) {
+                return definitions.toArray(PsiElement[]::new);
+            }
+            SliccCallSite[] calls = SliccFunctionNavigation.findCallSites(function);
+            if (calls.length > 0) return calls;
+            return definitions.toArray(PsiElement[]::new);
+        }
+        return resolveTargets(sourceElement);
+    }
 
+    @Nullable
+    public static PsiElement resolveReference(PsiElement sourceElement) {
+        PsiElement[] targets = resolveTargets(sourceElement);
+        if (targets == null || targets.length == 0) return null;
+        PsiElement target = targets[0];
+        SliccNamedElement declaration = PsiTreeUtil.getParentOfType(target, SliccNamedElement.class, false);
+        return declaration != null && (declaration == target || target.equals(declaration.getNameIdentifier()))
+                ? declaration : target;
+    }
+
+    @Nullable
+    private static PsiElement[] resolveTargets(@Nullable PsiElement sourceElement) {
         if (sourceElement == null) return null;
         if (!sourceElement.getLanguage().isKindOf(SliccLanguage.INSTANCE)) return null;
 
@@ -473,17 +502,25 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         // Built-in keyword tokens skip declaration-self / implicit-var / dot-access logic;
         // they only navigate to user-declared function counterparts.
         if (isBuiltinKeyword) {
-            String key = sourceElement.getText();
-            PsiFile file = sourceElement.getContainingFile();
-            if (file == null) return null;
-            return findFunctionInAllScopes(key, file);
+            List<SliccFunctionDecl> functions = SliccFunctionNavigation.resolveCall(sourceElement);
+            return functions.isEmpty() ? null : functions.toArray(PsiElement[]::new);
         }
 
         // If clicking on a declaration's own name, navigate to self.
         // Machine names (e.g. SpPCache) are special: they reference an enum member, so search further.
         SliccNamedElement ownDecl = findOwnDeclaration(sourceElement);
+        if (ownDecl instanceof SliccFunctionDecl function) {
+            return SliccFunctionNavigation.definitions(function).toArray(PsiElement[]::new);
+        }
         if (ownDecl != null && !(ownDecl instanceof SliccMachineDecl)) {
             return new PsiElement[]{sourceElement};
+        }
+
+        if (SliccActionNavigation.isTransitionActionReference(sourceElement)) {
+            SliccActionDecl action = SliccActionNavigation.resolveAction(sourceElement);
+            if (action == null) return null;
+            PsiElement identifier = action.getNameIdentifier();
+            return new PsiElement[]{identifier != null ? identifier : action};
         }
 
         String key = sourceElement.getText();
@@ -493,6 +530,17 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         boolean isTypeRef = isInTypeRefPosition(sourceElement);
         boolean isDotAccess = isDotAccess(sourceElement);
         boolean isColonAccess = isColonAccess(sourceElement);
+        com.intellij.lang.ASTNode qualifier = SliccPsiUtil.previousSignificantSibling(sourceElement.getNode());
+        if (qualifier != null && qualifier.getElementType() == SliccTokenTypes.OP_SCOPE
+                && extractCallArgTokens(sourceElement) != null) {
+            List<SliccFunctionDecl> functions = SliccFunctionNavigation.resolveCall(sourceElement);
+            return functions.isEmpty() ? null : functions.toArray(PsiElement[]::new);
+        }
+
+        if (!isTypeRef && !isDotAccess && !isColonAccess && SliccMessageScope.isMessageVariable(key)) {
+            PsiElement typeReference = SliccMessageScope.findTypeReference(key, sourceElement);
+            return typeReference != null ? new PsiElement[]{typeReference} : null;
+        }
 
         // Implicit built-in variables in ACTION bodies only → navigate to type declaration
         if (!isDotAccess && !isColonAccess) {
@@ -505,6 +553,10 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
 
         // Dot-access: resolve the type of the object before '.' for precise member lookup
         if (isDotAccess) {
+            if (extractCallArgTokens(sourceElement) != null) {
+                List<SliccFunctionDecl> functions = SliccFunctionNavigation.resolveCall(sourceElement);
+                return functions.isEmpty() ? null : functions.toArray(PsiElement[]::new);
+            }
             String ownerType = resolveDotOwnerType(sourceElement);
             if (ownerType != null) {
                 List<String> dotArgTypes = extractCallArgTokens(sourceElement);
@@ -512,6 +564,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
                 if (member != null) return new PsiElement[]{member};
                 return null;
             }
+            return null;
         }
 
         // Colon-access: resolve enum member (e.g. MessageSizeType:Data, SpMsgType:Inv)
@@ -526,10 +579,16 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
 
         // Step 0: local scope — SliccFieldDecl declared in the enclosing action/in_port body
         // (e.g. `Addr address := in_msg.addr;` takes priority over Entry.address struct field)
-        PsiElement localResult = searchLocalScope(sourceElement, key);
+        PsiElement localResult = isTypeRef ? null : searchLocalScope(sourceElement, key);
         if (localResult != null) return new PsiElement[]{localResult};
 
         List<String> argTypes = isTypeRef ? null : extractCallArgTokens(sourceElement);
+        if (argTypes != null) {
+            List<SliccFunctionDecl> functions = SliccFunctionNavigation.resolveCall(sourceElement);
+            if (!functions.isEmpty()) return functions.toArray(PsiElement[]::new);
+            PsiElement type = findTypeInAllScopes(key, file);
+            return type == null ? null : new PsiElement[]{type};
+        }
 
         // Step 1: current file
         PsiElement result = searchInFile(file, key, isTypeRef, isDotAccess, sourceElement, "self", argTypes, sourceElement);
@@ -606,20 +665,6 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
                 || t == SliccTokenTypes.KW_IS_VALID || t == SliccTokenTypes.KW_IS_INVALID;
     }
 
-    @Nullable
-    private static PsiElement[] findFunctionInAllScopes(String name, PsiFile file) {
-        List<SliccFunctionDecl> candidates = new ArrayList<>();
-        for (PsiFile f : collectSearchFiles(file)) {
-            for (SliccFunctionDecl fn : PsiTreeUtil.collectElementsOfType(f, SliccFunctionDecl.class)) {
-                if (name.equals(fn.getName())) candidates.add(fn);
-            }
-        }
-        if (candidates.isEmpty()) return null;
-        // No call-site element available here (builtin keyword path) — return first match
-        PsiElement id = candidates.get(0).getNameIdentifier();
-        return new PsiElement[]{id != null ? id : candidates.get(0)};
-    }
-
     private static boolean isInTypeRefPosition(PsiElement element) {
         PsiElement parent = element.getParent();
         return parent instanceof SliccCompositeElement p
@@ -629,10 +674,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
     /** Returns true if this identifier is preceded by a '.' (member access like cache.invalidate). */
     private static boolean isDotAccess(PsiElement element) {
         com.intellij.lang.ASTNode node = element.getNode();
-        com.intellij.lang.ASTNode prev = node.getTreePrev();
-        while (prev != null && prev.getElementType() == com.intellij.psi.TokenType.WHITE_SPACE) {
-            prev = prev.getTreePrev();
-        }
+        com.intellij.lang.ASTNode prev = SliccPsiUtil.previousSignificantSibling(node);
         return prev != null && prev.getElementType() == SliccTokenTypes.OP_DOT;
     }
 
@@ -640,25 +682,17 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
      *  (enum qualified access like MessageSizeType:Data). */
     private static boolean isColonAccess(PsiElement element) {
         com.intellij.lang.ASTNode node = element.getNode();
-        com.intellij.lang.ASTNode prev = node.getTreePrev();
-        while (prev != null && prev.getElementType() == com.intellij.psi.TokenType.WHITE_SPACE)
-            prev = prev.getTreePrev();
+        com.intellij.lang.ASTNode prev = SliccPsiUtil.previousSignificantSibling(node);
         if (prev == null || prev.getElementType() != SliccTokenTypes.OP_COLON) return false;
-        com.intellij.lang.ASTNode beforeColon = prev.getTreePrev();
-        while (beforeColon != null && beforeColon.getElementType() == com.intellij.psi.TokenType.WHITE_SPACE)
-            beforeColon = beforeColon.getTreePrev();
+        com.intellij.lang.ASTNode beforeColon = SliccPsiUtil.previousSignificantSibling(prev);
         return beforeColon != null && beforeColon.getElementType() == SliccTokenTypes.IDENTIFIER;
     }
 
     @Nullable
     private static String resolveColonOwnerType(PsiElement element) {
-        com.intellij.lang.ASTNode colon = element.getNode().getTreePrev();
-        while (colon != null && colon.getElementType() == com.intellij.psi.TokenType.WHITE_SPACE)
-            colon = colon.getTreePrev();
+        com.intellij.lang.ASTNode colon = SliccPsiUtil.previousSignificantSibling(element.getNode());
         if (colon == null || colon.getElementType() != SliccTokenTypes.OP_COLON) return null;
-        com.intellij.lang.ASTNode owner = colon.getTreePrev();
-        while (owner != null && owner.getElementType() == com.intellij.psi.TokenType.WHITE_SPACE)
-            owner = owner.getTreePrev();
+        com.intellij.lang.ASTNode owner = SliccPsiUtil.previousSignificantSibling(colon);
         return (owner != null && owner.getElementType() == SliccTokenTypes.IDENTIFIER)
                 ? owner.getText() : null;
     }
@@ -842,16 +876,12 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
      * object before the dot. Handles chained access recursively.
      */
     @Nullable
-    private static String resolveDotOwnerType(PsiElement element) {
+    static String resolveDotOwnerType(PsiElement element) {
         com.intellij.lang.ASTNode node = element.getNode();
-        com.intellij.lang.ASTNode dot = node.getTreePrev();
-        while (dot != null && dot.getElementType() == com.intellij.psi.TokenType.WHITE_SPACE)
-            dot = dot.getTreePrev();
+        com.intellij.lang.ASTNode dot = SliccPsiUtil.previousSignificantSibling(node);
         if (dot == null || dot.getElementType() != SliccTokenTypes.OP_DOT) return null;
 
-        com.intellij.lang.ASTNode ownerNode = dot.getTreePrev();
-        while (ownerNode != null && ownerNode.getElementType() == com.intellij.psi.TokenType.WHITE_SPACE)
-            ownerNode = ownerNode.getTreePrev();
+        com.intellij.lang.ASTNode ownerNode = SliccPsiUtil.previousSignificantSibling(dot);
         if (ownerNode == null || ownerNode.getElementType() != SliccTokenTypes.IDENTIFIER) return null;
 
         return resolveNodeType(ownerNode, element);
@@ -878,13 +908,9 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
                 ? originalFile : contextElement.getContainingFile();
 
         // Check if ownerNode is itself a dot-access (chained: grandOwner.ownerNode)
-        com.intellij.lang.ASTNode prevDot = ownerNode.getTreePrev();
-        while (prevDot != null && prevDot.getElementType() == com.intellij.psi.TokenType.WHITE_SPACE)
-            prevDot = prevDot.getTreePrev();
+        com.intellij.lang.ASTNode prevDot = SliccPsiUtil.previousSignificantSibling(ownerNode);
         if (prevDot != null && prevDot.getElementType() == SliccTokenTypes.OP_DOT) {
-            com.intellij.lang.ASTNode grandOwner = prevDot.getTreePrev();
-            while (grandOwner != null && grandOwner.getElementType() == com.intellij.psi.TokenType.WHITE_SPACE)
-                grandOwner = grandOwner.getTreePrev();
+            com.intellij.lang.ASTNode grandOwner = SliccPsiUtil.previousSignificantSibling(prevDot);
             if (grandOwner != null && grandOwner.getElementType() == SliccTokenTypes.IDENTIFIER) {
                 String grandOwnerType = resolveNodeType(grandOwner, contextElement, originalFile);
                 if (grandOwnerType != null && effectiveFile != null)
@@ -898,11 +924,12 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
             String implicit = IMPLICIT_VAR_TYPES.get(ownerName);
             if (implicit != null) return implicit;
         }
-        String msgType = resolveMessageVarType(ownerName, contextElement);
-        if (msgType != null) return msgType;
+        if (SliccMessageScope.isMessageVariable(ownerName)) {
+            return SliccMessageScope.resolveType(ownerName, contextElement);
+        }
 
         if (effectiveFile == null) return null;
-        return resolveVarType(ownerName, effectiveFile);
+        return resolveVarType(ownerName, contextElement, effectiveFile);
     }
 
     /**
@@ -963,77 +990,16 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
     }
 
     /**
-     * Resolves the type of `in_msg` and `out_msg` from the enclosing peek/enqueue statement.
-     *   peek(portName, MsgType)    { ... }  →  in_msg  : MsgType
-     *   enqueue(portName, MsgType) { ... }  →  out_msg : MsgType
-     * Walks up from element to find the enclosing BLOCK whose parent STATEMENT begins with
-     * KW_PEEK or KW_ENQUEUE, then extracts the second identifier argument.
-     */
-    @Nullable
-    private static String resolveMessageVarType(String varName, PsiElement element) {
-        if (!varName.equals("in_msg") && !varName.equals("out_msg")) return null;
-        PsiElement cur = element.getParent();
-        while (cur != null && !(cur instanceof PsiFile)) {
-            if (cur instanceof SliccCompositeElement
-                    && cur.getNode().getElementType() == SliccTypes.BLOCK) {
-                PsiElement stmtParent = cur.getParent();
-                if (stmtParent != null) {
-                    com.intellij.lang.ASTNode sn = stmtParent.getNode();
-                    com.intellij.lang.ASTNode first = sn.getFirstChildNode();
-                    while (first != null && first.getElementType() == com.intellij.psi.TokenType.WHITE_SPACE)
-                        first = first.getTreeNext();
-                    if (first != null) {
-                        boolean isPeek = first.getElementType() == SliccTokenTypes.KW_PEEK
-                                && "in_msg".equals(varName);
-                        boolean isEnqueue = first.getElementType() == SliccTokenTypes.KW_ENQUEUE
-                                && "out_msg".equals(varName);
-                        if (isPeek || isEnqueue) {
-                            // skip to '('
-                            com.intellij.lang.ASTNode n = first.getTreeNext();
-                            while (n != null && n.getElementType() != SliccTokenTypes.OP_LPAREN)
-                                n = n.getTreeNext();
-                            if (n != null) n = n.getTreeNext(); // skip '('
-                            // skip whitespace
-                            while (n != null && n.getElementType() == com.intellij.psi.TokenType.WHITE_SPACE)
-                                n = n.getTreeNext();
-                            // skip first arg (port name)
-                            if (n != null && n.getElementType() == SliccTokenTypes.IDENTIFIER)
-                                n = n.getTreeNext();
-                            // skip whitespace and comma
-                            while (n != null && (n.getElementType() == com.intellij.psi.TokenType.WHITE_SPACE
-                                    || n.getElementType() == SliccTokenTypes.OP_COMMA))
-                                n = n.getTreeNext();
-                            // second arg is the message type name
-                            if (n != null && n.getElementType() == SliccTokenTypes.IDENTIFIER)
-                                return n.getText();
-                        }
-                    }
-                }
-            }
-            cur = cur.getParent();
-        }
-        return null;
-    }
-
-    /**
-     * Finds the declared type of a variable by searching SliccFieldDecl with matching name.
-     * Prefers machine-level fields (not inside struct bodies) over struct member fields,
-     * so that e.g. `SpSequencer* sequencer` at machine level is found before any struct
-     * member that happens to share the same name.
+     * Finds the declared type of a variable using the declarations visible at the use site.
+     * Local declarations and parameters take precedence over enclosing fields.
      * Returns the type name string (the text of its TYPE_REF child), or null.
      */
     @Nullable
-    private static String resolveVarType(String varName, PsiFile file) {
-        List<PsiFile> searchFiles = collectSearchFiles(file);
-
-        // Pass 1: machine-level fields only (not inside struct/external_type bodies)
-        for (PsiFile f : searchFiles) {
-            for (SliccFieldDecl field : PsiTreeUtil.collectElementsOfType(f, SliccFieldDecl.class)) {
-                if (!varName.equals(field.getName())) continue;
-                if (!isMachineLevelField(field)) continue;
-                String t = extractTypeFromField(field);
-                if (t != null) return t;
-            }
+    private static String resolveVarType(String varName, PsiElement position, PsiFile file) {
+        for (SliccFieldDecl field : collectVisibleVariables(position, file)) {
+            if (varName.equals(field.getName())) return extractTypeFromField(field);
+        }
+        for (PsiFile f : collectSearchFiles(file)) {
             for (SliccInPortDecl port : PsiTreeUtil.collectElementsOfType(f, SliccInPortDecl.class)) {
                 if (varName.equals(port.getName())) {
                     com.intellij.lang.ASTNode typeRef = port.getNode().findChildByType(SliccTypes.TYPE_REF);
@@ -1045,15 +1011,6 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
             }
         }
 
-        // Pass 2: local vars / params / struct members (fallback)
-        for (PsiFile f : searchFiles) {
-            for (SliccFieldDecl field : PsiTreeUtil.collectElementsOfType(f, SliccFieldDecl.class)) {
-                if (!varName.equals(field.getName())) continue;
-                if (isMachineLevelField(field)) continue; // already checked
-                String t = extractTypeFromField(field);
-                if (t != null) return t;
-            }
-        }
         return null;
     }
 
@@ -1061,8 +1018,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
     private static String extractTypeFromField(SliccFieldDecl field) {
         com.intellij.lang.ASTNode typeRef = field.getNode().findChildByType(SliccTypes.TYPE_REF);
         if (typeRef == null) return null;
-        com.intellij.lang.ASTNode typeId = typeRef.findChildByType(SliccTokenTypes.IDENTIFIER);
-        return typeId != null ? typeId.getText() : null;
+        return SliccPsiUtil.typeText(typeRef).replace("*", "");
     }
 
     private static List<PsiFile> collectSearchFiles(PsiFile file) {
@@ -1175,7 +1131,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
      * e.g. structure(SpSequencer, interface = "Sequencer", ...) → "Sequencer"
      */
     @Nullable
-    private static String getStructureInterface(SliccStructureDecl s) {
+    static String getStructureInterface(SliccStructureDecl s) {
         com.intellij.lang.ASTNode attrList = s.getNode().findChildByType(SliccTypes.ATTRIBUTE_LIST);
         if (attrList == null) return null;
         for (com.intellij.lang.ASTNode attr = attrList.getFirstChildNode();
@@ -1199,61 +1155,8 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
 
     @Nullable
     private static PsiElement searchLocalScope(PsiElement element, String key) {
-        PsiElement cur = element.getParent();
-        while (cur != null && !(cur instanceof PsiFile)) {
-            if (cur instanceof SliccActionDecl
-                    || cur instanceof SliccInPortDecl
-                    || cur instanceof SliccFunctionDecl) {
-                // Search only declarations that are visible from element's position:
-                // walk the ancestor chain from element up to this scope boundary,
-                // collecting FIELD_DECL siblings that appear before each ancestor node.
-                PsiElement result = searchVisibleLocals(element, cur, key);
-                if (result != null) return result;
-
-                // If this is a struct member function, also search the struct's direct fields
-                if (cur instanceof SliccFunctionDecl && cur.getParent() instanceof SliccStructureDecl struct) {
-                    for (SliccFieldDecl field : PsiTreeUtil.collectElementsOfType(struct, SliccFieldDecl.class)) {
-                        if (field.getParent() != struct) continue;
-                        if (key.equals(field.getName())) {
-                            PsiElement nameId = field.getNameIdentifier();
-                            PsiElement target = nameId != null ? nameId : field;
-                            if (target != element) return target;
-                        }
-                    }
-                }
-                return null; // reached the body scope — stop, don't escalate
-            }
-            cur = cur.getParent();
-        }
-        return null;
-    }
-
-    /**
-     * Searches for a local variable named {@code key} that is visible from {@code element}
-     * within the scope bounded by {@code scopeRoot} (action/function/in_port body).
-     *
-     * Only considers FIELD_DECL nodes that are in the same block as an ancestor of
-     * {@code element} and appear before that ancestor — i.e., respects block scoping.
-     */
-    @Nullable
-    private static PsiElement searchVisibleLocals(PsiElement element, PsiElement scopeRoot, String key) {
-        // Walk from element up to scopeRoot, at each BLOCK level collect preceding siblings
-        PsiElement child = element;
-        PsiElement parent = child.getParent();
-        while (parent != null && parent != scopeRoot) {
-            if (parent instanceof SliccCompositeElement
-                    && parent.getNode().getElementType() == SliccTypes.BLOCK) {
-                // Scan siblings that come before 'child' in this block
-                for (PsiElement sib = parent.getFirstChild(); sib != null && sib != child; sib = sib.getNextSibling()) {
-                    if (sib instanceof SliccFieldDecl field && key.equals(field.getName())) {
-                        PsiElement nameId = field.getNameIdentifier();
-                        PsiElement target = nameId != null ? nameId : field;
-                        if (target != element) return target;
-                    }
-                }
-            }
-            child = parent;
-            parent = parent.getParent();
+        for (SliccFieldDecl field : collectVisibleVariables(element)) {
+            if (key.equals(field.getName())) return field.getNameIdentifier();
         }
         return null;
     }
@@ -1290,7 +1193,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
             }
             if (parent instanceof SliccCompositeElement
                     && parent.getNode().getElementType() == SliccTypes.BLOCK) {
-                for (PsiElement sib = parent.getFirstChild(); sib != null && sib != child; sib = sib.getNextSibling()) {
+                for (PsiElement sib = child.getPrevSibling(); sib != null; sib = sib.getPrevSibling()) {
                     if (sib instanceof SliccFieldDecl field) {
                         String n = field.getName();
                         if (n != null && seenNames.add(n)) result.add(field);
@@ -1310,6 +1213,15 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
                         String name = field.getName();
                         if (name != null && seenNames.add(name)) result.add(field);
                     }
+                }
+            }
+        }
+
+        if (scopeRoot instanceof SliccFunctionDecl && scopeRoot.getParent() instanceof SliccStructureDecl structure) {
+            for (PsiElement member : structure.getChildren()) {
+                if (member instanceof SliccFieldDecl field) {
+                    String name = field.getName();
+                    if (name != null && seenNames.add(name)) result.add(field);
                 }
             }
         }

@@ -5,6 +5,19 @@
 Language support for `.sm` and `.slicc` files used in the
 [gem5](https://www.gem5.org) Ruby memory-subsystem cache coherence framework.
 
+See [CHANGELOG.md](CHANGELOG.md) for the upcoming 1.2.0 release notes draft.
+
+Marketplace description, features, and 1.2.0 What's New are available in [MARKETPLACE.html](MARKETPLACE.html).
+The standalone Markdown description is available in [DESCRIPTION.md](DESCRIPTION.md).
+The HTML onboarding guide is available in [GET_STARTED.html](GET_STARTED.html).
+
+The product description and 1.2.0 release notes are also synchronized into
+`src/main/resources/META-INF/plugin.xml` (`<description>` and `<change-notes>`).
+Keep these copies aligned when editing the Marketplace HTML. Marketplace normally
+uses the uploaded plugin's metadata; if you have selected a permanent page-level
+description override, change that setting to use `plugin.xml` again. See the
+[official listing guidance](https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-description).
+
 ---
 
 ## Implemented Features
@@ -13,11 +26,15 @@ Language support for `.sm` and `.slicc` files used in the
 |---------|--------|
 | **Syntax highlighting** | Declaration keywords (`machine`, `structure`, `action`, `transition`, …), control flow, type keywords, built-in SLICC statements (`peek`, `enqueue`, `dequeue`, `trigger`, `stall_and_wait`, `new`, `isReady`, …), attribute keywords, comments, strings, numbers |
 | **Semantic highlighting** | Machine / structure / enumeration names highlighted as class names; action / function names as function declarations; enum members as constants; structure fields as instance fields; implicit variables (`tbe`, `cache_entry`, `address`) as predefined symbols |
-| **Go-to-Declaration** | `Ctrl+Click` (or `Ctrl+B`) on any identifier jumps to its definition, with overload-aware resolution for functions |
+| **Go-to-Declaration** | `Ctrl+Click` (or `Ctrl+B`) on any identifier jumps to its definition, with block-scoped variables, parameter/local shadowing, and overload-aware resolution for functions |
+| **Action → transitions** | `Ctrl+Click` / `Ctrl+B` on an action declaration name jumps to its sole referencing transition, or opens a chooser showing transition headers and files when there are multiple matches |
+| **Function navigation** | Calls and separate declarations jump to the matching definition; clicking a definition name, or a declaration with no SLICC definition (including structure/external-type methods), lists concrete calling statements in functions/actions and navigates to the call's line. One statement jumps directly; multiple statements open a chooser with file/line locations. Multiline statements display on one line, capped at 160 characters with an ellipsis; override using the IDE VM option `-Dslicc.navigation.maxStatementLength=240`. Match parameter signatures and machine/include/type scopes; calls to declaration-only functions still navigate to the declaration |
 | **Go to Symbol** | `Ctrl+Alt+Shift+N` to search for any action, function, machine, or type by name |
-| **Find Usages** | `Alt+F7` on any named declaration finds all reference sites |
-| **Auto-completion** | All SLICC keywords, gem5 built-in types, and file-local symbols (actions, functions, structures, enumerations); dot-triggered member completion (`tbe.`, `in_msg.`, `someVar.`) shows fields and functions of the resolved type |
+| **Find Usages** | `Alt+F7` on any named declaration finds its reference sites, distinguishing same-named fields, local variables, and resolved function overloads |
+| **Auto-completion** | All SLICC keywords, gem5 built-in types, file-local symbols, and free functions visible through includes, protocol files, and global declarations. Function candidates show return types and parameter signatures; dot-triggered member completion (`tbe.`, `in_msg.`, `someVar.`) shows fields and functions of the resolved type |
 | **Parameter info** | `Ctrl+P` (or auto-popup on `(`) shows all overloads of a function with parameter types; current argument position is highlighted |
+| **Scoped message variables** | `in_msg` is available only inside `peek` bodies and `out_msg` only inside `enqueue` bodies, including nested blocks. Their types come from the statement's second argument and drive member completion and navigation; usage outside the corresponding scope is reported as an error |
+| **Member access with comments** | Member completion and navigation support whitespace and comments on either side of `.`, including chained accesses |
 | **Unresolved identifier errors** | Identifiers that cannot be resolved to any declaration are underlined in red |
 | **Structure View** | `Alt+7` shows a tree: machine → in_ports, out_ports, actions, transitions, functions |
 | **Code Folding** | `machine`, `in_port`, `action`, and free-standing function bodies can be collapsed |
@@ -56,12 +73,39 @@ ide.localPath=/path/to/CLion
 # macOS example:   ide.localPath=/Applications/CLion.app/Contents
 ```
 
+### Windows: backend exits with code 77
+
+If `runIde` reports that the Rider host exited with code 77, inspect
+`backend.<timestamp>.<pid>.log` under
+`.intellijPlatform/sandbox/slicc-plugin/<IDE-version>/log/` for the underlying error.
+CLion also uses this backend, so the message can appear while running CLion.
+
+If the log reports `COR_E_PATHTOOLONG`, `0x800700CE`, or "The filename or extension
+is too long" while loading a DLL, use `ide.localPath` above to select an installed
+IDE in a shorter path. An IDE extracted deep inside the Gradle cache can exceed
+Windows path limits, especially with a long `GRADLE_USER_HOME` such as a Scoop
+installation directory. Alternatively, use a shorter Gradle user home before
+starting Gradle; this creates a separate cache and may download dependencies again.
+An existing cached IDE can also be exposed through a shorter Windows directory
+junction, with `ide.localPath` pointing to the junction. Keep its target intact;
+clearing that Gradle cache requires recreating the junction.
+
+The `Debug privileges not enabled` message alone does not identify the cause of
+the backend exit. Verify the fix by restarting `runIde` and checking the new
+backend log. Keep local paths in the gitignored `gradle.properties` file, and
+check plugin compatibility separately against the oldest IDE version you support
+if your local installation is newer.
+
+If Gradle cannot find the Java toolchain required by that IDE, point
+`org.gradle.java.installations.paths` in `gradle.properties` to its bundled
+`jbr` directory (provided it contains `bin/javac.exe`), or install a matching JDK.
+
 ### Build commands
 
 ```bash
 # Build the distributable plugin ZIP
 ./gradlew buildPlugin
-# Output: build/distributions/slicc-plugin-1.0.1.zip
+# Output: build/distributions/slicc-plugin-1.2.0.zip
 
 # Launch a sandboxed IDE with the plugin loaded (primary way to test)
 ./gradlew runIde
@@ -72,7 +116,7 @@ ide.localPath=/path/to/CLion
 ## Installing in CLion / IntelliJ IDEA
 
 1. Go to **Settings → Plugins → ⚙ → Install Plugin from Disk…**
-2. Select `build/distributions/slicc-plugin-1.0.1.zip`
+2. Select `build/distributions/slicc-plugin-1.2.0.zip`
 3. Restart the IDE
 4. Open any `.sm` or `.slicc` file — highlighting activates immediately
 
