@@ -9,6 +9,10 @@
 <h2>Features</h2>
 <ul>
   <li><strong>Syntax and semantic highlighting</strong> — Distinguish SLICC keywords, types, machines, actions, functions, enumeration members, and fields. Customise colours in the IDE's SLICC colour scheme.</li>
+  <li><strong>Additional attributes and built-ins</strong> — Highlight and complete <code>block_on</code> and <code>format</code> like <code>main</code> and <code>desc</code>. Recognise <code>DPRINTF</code>, <code>DPRINTFN</code>, and <code>APPEND_TRANSITION_COMMENT</code> as built-in calls, independently of the 30 reserved words.</li>
+  <li><strong>Debug-flag completion and format checks</strong> — Suggest literal <code>DebugFlag</code> and <code>CompoundFlag</code> names from related Ruby build sources for the first <code>DPRINTF</code> argument. Report missing flags and known-source unknown flags. Check literal <code>DPRINTF</code> / <code>DPRINTFN</code> format argument counts, including escaped percent signs and star width/precision arguments; <code>DPRINTFN</code> takes no flag.</li>
+  <li><strong>Transition and call diagnostics</strong> — Report missing transition actions and later duplicate state/event pairs in machine/include order. Report missing visible free or supported scoped functions without treating an overload argument mismatch as a missing function; dot-member errors remain type-aware member diagnostics.</li>
+  <li><strong>Description documentation</strong> — Show a declaration's <code>desc</code> on hover or with Quick Documentation (<code>Ctrl+Q</code>), including resolved usages of structures, fields, enumerations/constants, functions, and actions. Preserve scopes, escape HTML, retain line breaks, and share descriptions between matching function prototypes and definitions.</li>
   <li><strong>Complete reserved-word coverage</strong> — Highlight and complete all 30 gem5 SLICC reserved words, including <code>global</code>, <code>wakeup_port</code>, <code>check_next_cycle</code>, <code>check_stop_slots</code>, <code>check_on_cache_probe</code>, <code>defer_enqueueing</code>, and case-sensitive <code>OOD</code>. Recognise <code>in_trans</code>, <code>out_trans</code>, and <code>main</code> as attribute keywords alongside <code>interface</code> and <code>desc</code>.</li>
   <li><strong>External SLICC types → C++ definitions</strong> — Navigate from <code>structure</code> names marked <code>external="yes"</code> and <code>external_type</code> declaration names to reachable gem5 C++ type definitions and supported aliases. Respect namespaces, <code>external_name</code>, and Ruby source-root boundaries; report missing definitions as errors and unavailable source context as warnings.</li>
   <li><strong>Action ↔ transition navigation</strong> — Jump from a transition's action reference to its implementation. From an action declaration, jump to its referencing transition or choose among multiple transitions.</li>
@@ -32,7 +36,33 @@
 
 <h2>Current Limitations</h2>
 <p>Rename refactoring, automatic code formatting, and live templates are not implemented. Member diagnostics check names exposed by SLICC declarations, not undeclared C++ members. Unknown receiver types, incomplete or cyclic interfaces, ambiguous types, malformed declarations, and indexing defer this name-only check; call-result, parenthesized, and indexed receivers are not inferred for member-name errors. Separate function-result checks use supported SLICC nominal types, not complete C++ conversions, validation of every raw argument, or function-body return-statement checking; unknown expressions, ambiguous type declarations, conflicting overloads, complex operators, and indexing defer these diagnostics. Inlay type hints cover implicit SLICC variables, not arbitrary C++ expressions. The plugin provides editor support; it does not replace the gem5 SLICC compiler or run simulations.</p>
+<p>Debug-flag lookup statically reads supported literal build declarations; unavailable or incomplete source context defers unknown-flag errors. Format diagnostics validate argument counts, not argument types, and defer dynamic or unsupported format strings and incomplete calls. Transition and missing-function checks defer ambiguous or incomplete scopes and indexing rather than guessing. Documentation does not borrow an enclosing declaration's description when the selected symbol has none.</p>
 <p>External-type lookup follows supported literal <code>Source</code> / <code>MakeInclude</code> / include paths, considering conditional branches together without executing Kconfig, SCons, or a C++ preprocessor. Computed paths and macro-generated definitions may not resolve. C++ member/call navigation is not included.</p>
+
+<h2>What's New in 1.4.0</h2>
+<p>Release date: <strong>2026-10-21</strong>.</p>
+
+<h3>Diagnostics, Completion, and Documentation</h3>
+<ul>
+  <li><strong>Additional attributes and built-ins.</strong> Add <code>block_on</code> / <code>format</code> attribute highlighting and completion, plus built-in parsing, highlighting, and completion for <code>DPRINTF</code>, <code>DPRINTFN</code>, and <code>APPEND_TRANSITION_COMMENT</code>. The gem5 reserved-word list remains 30 words.</li>
+  <li><strong>Ruby debug flags.</strong> Complete the first <code>DPRINTF</code> argument from literal <code>DebugFlag</code> / <code>CompoundFlag</code> declarations in the related Ruby/Kconfig/SConscript source graph. Report missing flags and unknown flags only when the source context supports a definite result; <code>DPRINTFN</code> does not take a debug flag.</li>
+  <li><strong>Literal format argument counts.</strong> Check <code>DPRINTF</code> / <code>DPRINTFN</code> literal format strings against supplied argument counts. Escaped <code>%%</code> consumes none; star width and precision each consume an argument. Nested calls do not split arguments at inner commas. This checks counts, not types; dynamic/unsupported formats and incomplete calls defer diagnostics.</li>
+  <li><strong>Transition consistency.</strong> Report unresolved action names and later duplicate state/event pairs after expanding state/event sets and includes in machine order. Preserve machine isolation and cache invalidation; ambiguous/incomplete contexts and indexing defer diagnostics.</li>
+  <li><strong>Missing function names.</strong> Report missing visible free and supported scoped functions. Do not misreport an existing function with incompatible arguments as absent, or guess members of unknown receivers; dot-member checking remains separate.</li>
+  <li><strong>Declaration descriptions.</strong> Show <code>desc</code> text on hover and in <code>Ctrl+Q</code> documentation at declarations and scope-resolved usages. Support structures, fields, enumerations/constants, functions, and actions; escape HTML, preserve line breaks, and fall back between matching function prototypes/definitions without borrowing descriptions from enclosing declarations.</li>
+</ul>
+
+<h3>Correct Default Action Variables</h3>
+<ul>
+  <li><strong>Resolve the actual default cache-entry type.</strong> Inside actions, navigate implicit <code>cache_entry</code> to the visible primary <code>AbstractCacheEntry</code> implementation, such as CHI's <code>CacheEntry</code>, instead of requiring the name <code>Entry</code>. Omitted <code>main</code> defaults to true; case-insensitive <code>main="false"</code> excludes types such as <code>DirEntry</code>. Preserve machine/include ownership and do not guess missing or ambiguous defaults.</li>
+  <li><strong>Distinguish parameters from implicit bindings.</strong> Function parameters and visible local variables named <code>tbe</code> or <code>cache_entry</code> navigate to their declarations. Only implicit action variables navigate to <code>TBE</code> or the primary cache-entry type. Completion, expression and function-call inference, and implicit type hints share the same selected type.</li>
+</ul>
+
+<h3>File and Symbol Icons</h3>
+<ul>
+  <li><strong>Distinct rounded-square file icons.</strong> Recognise <code>.sm</code> files by a blue badge with white <code>SM</code>, and <code>.slicc</code> files by a <code>#9673A6</code> purple badge with white <code>H</code>. Dark-theme variants reverse foreground and background colours.</li>
+  <li><strong>Lettered declaration icons.</strong> Circular badges distinguish actions (<code>a</code>), enumerations (<code>e</code>), functions (<code>f</code>), machines (<code>m</code>), structures (<code>s</code>), and transitions (<code>t</code>). File and declaration icons share font-independent outlined lettering and dedicated light/dark variants.</li>
+</ul>
 
 <h2>What's New in 1.3.0</h2>
 <p>Release date: <strong>2026-10-21</strong>.</p>

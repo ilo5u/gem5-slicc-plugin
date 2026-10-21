@@ -41,6 +41,8 @@ public interface SliccTokenTypes {
     IElementType KW_OOD              = new SliccTokenType("OOD");
     IElementType KW_DEFER_ENQUEUEING  = new SliccTokenType("defer_enqueueing");
     IElementType KW_DPRINTF          = new SliccTokenType("DPRINTF");
+    IElementType KW_DPRINTFN         = new SliccTokenType("DPRINTFN");
+    IElementType KW_APPEND_TRANSITION_COMMENT = new SliccTokenType("APPEND_TRANSITION_COMMENT");
     IElementType KW_SET_CACHE_ENTRY  = new SliccTokenType("set_cache_entry");
     IElementType KW_UNSET_CACHE_ENTRY= new SliccTokenType("unset_cache_entry");
     IElementType KW_SET_TBE          = new SliccTokenType("set_tbe");
@@ -52,6 +54,8 @@ public interface SliccTokenTypes {
     // ...... Attribute / qualifier keywords ............................................................................................................
     IElementType KW_DESC             = new SliccTokenType("desc");
     IElementType KW_MAIN             = new SliccTokenType("main");
+    IElementType KW_BLOCK_ON         = new SliccTokenType("block_on");
+    IElementType KW_FORMAT           = new SliccTokenType("format");
     IElementType KW_IN_TRANS         = new SliccTokenType("in_trans");
     IElementType KW_OUT_TRANS        = new SliccTokenType("out_trans");
     IElementType KW_DEFAULT          = new SliccTokenType("default");

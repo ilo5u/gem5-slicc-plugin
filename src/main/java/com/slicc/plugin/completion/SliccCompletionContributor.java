@@ -9,13 +9,18 @@ import com.intellij.util.ProcessingContext;
 import com.slicc.plugin.icons.SliccIcons;
 import com.slicc.plugin.lang.SliccLanguage;
 import com.slicc.plugin.lexer.SliccTokenTypes;
+import com.slicc.plugin.lexer.SliccBuiltinFunctions;
 import com.slicc.plugin.navigation.SliccGotoDeclarationHandler;
 import com.slicc.plugin.navigation.SliccMessageScope;
 import com.slicc.plugin.navigation.SliccFileSymbols;
+import com.slicc.plugin.navigation.SliccDebugFlags;
+import com.slicc.plugin.navigation.SliccPrintfDiagnostics;
 import com.slicc.plugin.psi.*;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.StringJoiner;
 
 /**
@@ -27,6 +32,17 @@ import java.util.StringJoiner;
  *   3. Common type names collected from declarations in scope
  */
 public class SliccCompletionContributor extends CompletionContributor {
+
+    private static boolean addDebugFlagCompletions(PsiElement position, PsiElement originalPosition,
+                                                   CompletionResultSet result) {
+        if (!SliccPrintfDiagnostics.isDebugFlagArgument(position)) return false;
+        PsiElement context = originalPosition != null ? originalPosition : position;
+        for (SliccDebugFlags.Flag flag : SliccDebugFlags.visible(context)) {
+            result.addElement(LookupElementBuilder.create(flag.name())
+                    .withIcon(SliccIcons.ENUM).withTypeText("Debug flag"));
+        }
+        return true;
+    }
 
     // ...... Dot-triggered member completion ..........................................................................................................
 
@@ -106,6 +122,7 @@ public class SliccCompletionContributor extends CompletionContributor {
     }
 
     private static void addImplicitVarCompletions(@NotNull PsiElement position,
+                                                   @NotNull PsiFile originalFile,
                                                    @NotNull CompletionResultSet result) {
         for (String name : List.of("in_msg", "out_msg")) {
             if (SliccMessageScope.isVisible(name, position)
@@ -116,19 +133,17 @@ public class SliccCompletionContributor extends CompletionContributor {
                         .withBoldness(true));
             }
         }
-        // tbe, cache_entry, address are only valid inside action bodies
-        PsiElement cur = position.getParent();
-        while (cur != null && !(cur instanceof com.intellij.psi.PsiFile)) {
-            if (cur instanceof SliccActionDecl) {
-                result.addElement(LookupElementBuilder.create("tbe")
-                        .withIcon(SliccIcons.STRUCTURE).withTypeText("TBE").withBoldness(true));
-                result.addElement(LookupElementBuilder.create("cache_entry")
-                        .withIcon(SliccIcons.STRUCTURE).withTypeText("Entry").withBoldness(true));
-                result.addElement(LookupElementBuilder.create("address")
-                        .withIcon(SliccIcons.STRUCTURE).withTypeText("Addr").withBoldness(true));
-                return;
+        Set<String> explicitNames = new HashSet<>();
+        for (SliccFieldDecl field : SliccGotoDeclarationHandler.collectVisibleVariables(position, originalFile)) {
+            explicitNames.add(field.getName());
+        }
+        for (String name : List.of("tbe", "cache_entry", "address")) {
+            if (explicitNames.contains(name)) continue;
+            String type = SliccGotoDeclarationHandler.resolveImplicitVariableType(name, position, originalFile);
+            if (type != null) {
+                result.addElement(LookupElementBuilder.create(name)
+                        .withIcon(SliccIcons.STRUCTURE).withTypeText(type).withBoldness(true));
             }
-            cur = cur.getParent();
         }
     }
 
@@ -153,12 +168,11 @@ public class SliccCompletionContributor extends CompletionContributor {
             "check_allocate", "error", "assert",
             "wakeup_port", "check_next_cycle", "check_stop_slots", "check_on_cache_probe",
             "defer_enqueueing", "static_cast", "is_valid", "is_invalid", "new", "OOD",
-            "DPRINTF",
             "set_cache_entry", "unset_cache_entry", "set_tbe", "unset_tbe"
     );
 
     private static final List<String> ATTR_KEYWORDS = List.of(
-            "desc", "main", "in_trans", "out_trans", "default", "network", "virtual_network",
+            "desc", "main", "block_on", "format", "in_trans", "out_trans", "default", "network", "virtual_network",
             "vnet_type", "rank", "interface", "external", "primitive", "ordered"
     );
 
@@ -181,8 +195,9 @@ public class SliccCompletionContributor extends CompletionContributor {
                         boolean memberDone = addMemberCompletions(parameters, result);
                         if (memberDone) return;
                         PsiElement pos = parameters.getPosition();
+                        if (addDebugFlagCompletions(pos, parameters.getOriginalPosition(), result)) return;
                         boolean inAction = isInsideActionBody(pos);
-                        addImplicitVarCompletions(pos, result);
+                        addImplicitVarCompletions(pos, parameters.getOriginalFile(), result);
                         addScopeVariableCompletions(pos, parameters.getOriginalFile(), result);
                         addKeywords(result);
                         addFileSymbols(parameters.getOriginalFile(), result, inAction);
@@ -219,6 +234,11 @@ public class SliccCompletionContributor extends CompletionContributor {
         }
         for (String kw : BUILTIN_STMTS) {
             result.addElement(LookupElementBuilder.create(kw)
+                    .withIcon(SliccIcons.FUNCTION)
+                    .withTypeText("built-in"));
+        }
+        for (String name : SliccBuiltinFunctions.names()) {
+            result.addElement(LookupElementBuilder.create(name)
                     .withIcon(SliccIcons.FUNCTION)
                     .withTypeText("built-in"));
         }

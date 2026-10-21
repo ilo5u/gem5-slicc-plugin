@@ -10,7 +10,7 @@ import com.intellij.psi.PsiFile;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.slicc.plugin.lexer.SliccTokenTypes;
-import com.slicc.plugin.psi.SliccActionDecl;
+import com.slicc.plugin.lexer.SliccBuiltinFunctions;
 import com.slicc.plugin.psi.SliccEnumMember;
 import com.slicc.plugin.psi.SliccEnumerationDecl;
 import com.slicc.plugin.psi.SliccExternalTypeDecl;
@@ -82,7 +82,8 @@ public final class SliccExpressionTypes {
         public Call inspectCall(@NotNull PsiElement name) {
             if (!available || scope.hasAmbiguousOwners()) return null;
             ASTNode node = name.getNode();
-            if (node == null || node.getElementType() != SliccTokenTypes.IDENTIFIER) return null;
+            if (node == null || node.getElementType() != SliccTokenTypes.IDENTIFIER
+                    && !SliccBuiltinFunctions.isToken(node.getElementType())) return null;
             ASTNode next = SliccPsiUtil.nextSignificantSibling(node);
             if (next == null || next.getElementType() != SliccTokenTypes.OP_LPAREN) return null;
             if (calls.containsKey(node)) return calls.get(node);
@@ -214,6 +215,9 @@ public final class SliccExpressionTypes {
                             ? type.toString() : null, arguments.containsCall());
                 } else if (kind == SliccTokenTypes.KW_STATIC_CAST) {
                     value = cast();
+                } else if (SliccBuiltinFunctions.isToken(kind)) {
+                    if (!at(SliccTokenTypes.OP_LPAREN)) return UNKNOWN;
+                    value = call(first, List.of());
                 } else if (kind == SliccTokenTypes.IDENTIFIER) {
                     boolean detachedMember = index >= 2 && (tokens.get(index - 2).getElementType() == SliccTokenTypes.OP_DOT
                             || tokens.get(index - 2).getElementType() == SliccTokenTypes.OP_SCOPE
@@ -327,6 +331,7 @@ public final class SliccExpressionTypes {
                     Call call = new Call(List.copyOf(arguments), List.copyOf(candidates), List.copyOf(viable), complete);
                     calls.put(name, call);
                     index = closing + 1;
+                    if (complete && SliccBuiltinFunctions.isToken(name.getElementType())) return new Value("void", true);
                     if (arguments.stream().anyMatch(argument -> argument.value().type() == null)) return new Value(null, true);
                     String returnType = null;
                     for (SliccFunctionDecl function : viable) {
@@ -416,11 +421,8 @@ public final class SliccExpressionTypes {
                 }
                 return new Value(SliccPsiUtil.typeText(variable.getNode().findChildByType(SliccTypes.TYPE_REF)), false);
             }
-            if (PsiTreeUtil.getParentOfType(position, SliccActionDecl.class) != null) {
-                if ("tbe".equals(name)) return new Value("TBE", false);
-                if ("cache_entry".equals(name)) return new Value("Entry", false);
-                if ("address".equals(name)) return new Value("Addr", false);
-            }
+            String implicitType = SliccGotoDeclarationHandler.resolveImplicitVariableType(name, position);
+            if (implicitType != null) return new Value(implicitType, false);
             SliccEnumMember member = SliccMemberNavigation.resolveConstant(null, name, position);
             if (member != null && member.getParent() instanceof SliccNamedElement owner) return new Value(owner.getName(), false);
             return UNKNOWN;
@@ -559,7 +561,7 @@ public final class SliccExpressionTypes {
         return kind == SliccTokenTypes.IDENTIFIER || kind == SliccTokenTypes.INTEGER_LITERAL
                 || kind == SliccTokenTypes.FLOAT_LITERAL || kind == SliccTokenTypes.STRING_LITERAL
                 || kind == SliccTokenTypes.OP_LPAREN || kind == SliccTokenTypes.KW_STATIC_CAST
-                || kind == SliccTokenTypes.KW_NEW
+                || kind == SliccTokenTypes.KW_NEW || SliccBuiltinFunctions.isToken(kind)
                 || kind == SliccTokenTypes.KW_IS_VALID || kind == SliccTokenTypes.KW_IS_INVALID
                 || kind == SliccTokenTypes.OP_MINUS || kind == SliccTokenTypes.OP_PLUS;
     }

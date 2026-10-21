@@ -6,6 +6,7 @@ import com.intellij.lang.PsiBuilder;
 import com.intellij.lang.PsiBuilder.Marker;
 import com.intellij.lang.PsiParser;
 import com.intellij.psi.tree.IElementType;
+import com.slicc.plugin.lexer.SliccBuiltinFunctions;
 import com.slicc.plugin.lexer.SliccTokenTypes;
 import com.slicc.plugin.psi.SliccTypes;
 import org.jetbrains.annotations.NotNull;
@@ -596,7 +597,7 @@ public class SliccParser implements PsiParser, LightPsiParser {
                 || tt == SliccTokenTypes.KW_CHECK_STOP_SLOTS
                 || tt == SliccTokenTypes.KW_CHECK_ON_CACHE_PROBE
                 || tt == SliccTokenTypes.KW_DEFER_ENQUEUEING
-                || tt == SliccTokenTypes.KW_DPRINTF
+                || SliccBuiltinFunctions.isToken(tt)
                 || tt == SliccTokenTypes.KW_TRIGGER
                 || tt == SliccTokenTypes.KW_SET_CACHE_ENTRY
                 || tt == SliccTokenTypes.KW_UNSET_CACHE_ENTRY
@@ -817,6 +818,7 @@ public class SliccParser implements PsiParser, LightPsiParser {
 
     private boolean isAttrKeyword(IElementType t) {
         return t == SliccTokenTypes.KW_DESC || t == SliccTokenTypes.KW_MAIN
+                || t == SliccTokenTypes.KW_BLOCK_ON || t == SliccTokenTypes.KW_FORMAT
                 || t == SliccTokenTypes.KW_DEFAULT
                 || t == SliccTokenTypes.KW_IN_TRANS || t == SliccTokenTypes.KW_OUT_TRANS
                 || t == SliccTokenTypes.KW_NETWORK || t == SliccTokenTypes.KW_VIRTUAL_NETWORK

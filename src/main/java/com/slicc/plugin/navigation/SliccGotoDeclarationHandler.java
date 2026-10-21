@@ -262,10 +262,8 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
                 return SliccPsiUtil.typeText(field.getNode().findChildByType(SliccTypes.TYPE_REF));
             }
         }
-        if (isInActionBody(callSite)) {
-            String implicit = IMPLICIT_VAR_TYPES.get(argName);
-            if (implicit != null) return implicit;
-        }
+        String implicit = resolveImplicitVariableType(argName, callSite, file);
+        if (implicit != null) return implicit;
         String varType = resolveVarType(argName, callSite, file);
         if (varType != null) return varType;
         // If the name is itself a type (e.g. `new Entry` → argName="Entry"), return it directly
@@ -594,12 +592,10 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         PsiElement localResult = isTypeRef ? null : searchLocalScope(sourceElement, key);
         if (localResult != null) return new PsiElement[]{localResult};
 
-        if (!isTypeRef && !isDotAccess && !isColonAccess) {
-            String implicitType = getImplicitVarType(key, sourceElement);
-            if (implicitType != null) {
-                PsiElement typeTarget = resolveImplicitType(implicitType, sourceElement);
-                return typeTarget != null ? new PsiElement[]{typeTarget} : null;
-            }
+        if (!isTypeRef && !isDotAccess && !isColonAccess
+                && isInActionBody(sourceElement) && IMPLICIT_VARIABLES.contains(key)) {
+            PsiElement typeTarget = resolveImplicitType(key, sourceElement);
+            return typeTarget != null ? new PsiElement[]{typeTarget} : null;
         }
 
         if (!isTypeRef && extractCallArgTokens(sourceElement) == null) {
@@ -868,23 +864,37 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         return true;
     }
 
-    private static final java.util.Map<String, String> IMPLICIT_VAR_TYPES = java.util.Map.of(
-            "tbe",         "TBE",
-            "cache_entry", "Entry",
-            "address",     "Addr"
-    );
+    private static final Set<String> IMPLICIT_VARIABLES = Set.of("tbe", "cache_entry", "address");
 
     @Nullable
-    private static String getImplicitVarType(String name, PsiElement element) {
-        String typeName = IMPLICIT_VAR_TYPES.get(name);
-        if (typeName == null) return null;
-        return isInActionBody(element) ? typeName : null;
+    public static String resolveImplicitVariableType(String name, PsiElement element) {
+        return resolveImplicitVariableType(name, element, null);
     }
 
     @Nullable
-    private static PsiElement resolveImplicitType(String typeName, PsiElement context) {
+    public static String resolveImplicitVariableType(String name, PsiElement element, @Nullable PsiFile originalFile) {
+        if (!IMPLICIT_VARIABLES.contains(name) || !isInActionBody(element)) return null;
+        if ("tbe".equals(name)) return "TBE";
+        if ("address".equals(name)) return "Addr";
+        PsiElement context = element;
+        if (originalFile != null && originalFile != element.getContainingFile() && originalFile.getTextLength() > 0) {
+            PsiElement original = originalFile.findElementAt(Math.min(element.getTextOffset(), originalFile.getTextLength() - 1));
+            if (original != null) context = original;
+        }
+        SliccStructureDecl declaration = new SliccFunctionNavigation.Scope(context).cacheEntryType();
+        return declaration == null ? null : declaration.getName();
+    }
+
+    @Nullable
+    private static PsiElement resolveImplicitType(String variableName, PsiElement context) {
         SliccFunctionNavigation.Scope scope = new SliccFunctionNavigation.Scope(context);
         if (scope.hasAmbiguousOwners()) return null;
+        if ("cache_entry".equals(variableName)) {
+            SliccStructureDecl declaration = scope.cacheEntryType();
+            return declaration == null ? null : declaration.getNameIdentifier();
+        }
+        String typeName = resolveImplicitVariableType(variableName, context);
+        if (typeName == null) return null;
         SliccNamedElement selected = null;
         int bestRank = Integer.MAX_VALUE;
         boolean ambiguous = false;
@@ -977,10 +987,8 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         for (SliccFieldDecl field : collectVisibleVariables(contextElement, effectiveFile)) {
             if (ownerName.equals(field.getName())) return extractTypeFromField(field);
         }
-        if (isInActionBody(contextElement)) {
-            String implicit = IMPLICIT_VAR_TYPES.get(ownerName);
-            if (implicit != null) return implicit;
-        }
+        String implicit = resolveImplicitVariableType(ownerName, contextElement, effectiveFile);
+        if (implicit != null) return implicit;
 
         if (effectiveFile == null) return null;
         return resolveVarType(ownerName, contextElement, effectiveFile);

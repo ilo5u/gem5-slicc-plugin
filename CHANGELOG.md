@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.4.0 — 2026-10-21
+
+This release combines corrected default action-variable resolution with the file
+and declaration icons previously included in the 1.3.0 same-version refresh,
+additional attributes and built-ins, Ruby debug-flag completion, conservative
+format/transition/call diagnostics, and declaration-description documentation.
+
+### Added
+
+- Highlight and complete `block_on` / `format` as attribute keywords alongside `main` / `desc`. Recognise `DPRINTF`, `DPRINTFN`, and `APPEND_TRANSITION_COMMENT` in the lexer, parser, syntax highlighting, and completion; keep these built-ins and attributes separate from the 30 gem5 reserved words.
+- Extract literal `DebugFlag` / `CompoundFlag` names from the related Ruby/Kconfig/SConscript source graph for `DPRINTF` first-argument completion and known-source validation. Report missing flags; defer unknown-name errors when source context is unavailable or incomplete. `DPRINTFN` does not take a flag.
+- Check literal `DPRINTF` / `DPRINTFN` format argument counts, not argument types: `%%` consumes no argument and each star width/precision consumes one. Preserve nested-call commas, and defer dynamic/unsupported formats and incomplete calls.
+- Report missing actions in transition bodies and later duplicate state/event pairs after expanding state/event sets and include order. Preserve machine isolation, cancellation, cache invalidation, and deferral for ambiguous/incomplete contexts or indexing.
+- Report missing visible free and supported scoped function names without interpreting overload argument mismatches as absent functions. Leave dot-RHS diagnostics to the existing member checker and defer unknown receivers or incomplete/ambiguous scopes.
+- Show `desc` text on hover and in Quick Documentation (`Ctrl+Q`) at declarations and scope-resolved usages, including structures, fields, enums/constants, functions, and actions. Escape HTML, preserve line breaks, fall back between same-signature function prototypes/definitions, and do not borrow an enclosing declaration's description.
+- Include distinct rounded-square file icons: blue with white `SM` for `.sm`, and `#9673A6` purple with white `H` for `.slicc`. Dark-theme variants reverse foreground and background colours; file and declaration icons share font-independent outlined lettering.
+- Include lowercase circular declaration badges for actions (`a`), enumerations (`e`), functions (`f`), machines (`m`), structures (`s`), and transitions (`t`), each with dedicated light/dark variants.
+
+### Fixed
+
+- Resolve an action's implicit `cache_entry` from its visible primary `structure` implementing `AbstractCacheEntry`, not the literal type name `Entry`. Omitted `main` defaults to true; `main="false"` is excluded case-insensitively. CHI therefore navigates to `CacheEntry`, never its non-main `DirEntry`. Preserve machine/include ownership and defer missing or ambiguous default types.
+- Keep explicit function parameters and lexical variables named `tbe` / `cache_entry` ahead of implicit action bindings. Share the selected cache-entry type with member completion, overload and expression inference, and implicit type hints, including completion PSI copies.
+
+### Validation
+
+- Additional temporary checks passed on each local CLion 2026.1 and 2026.2 SDK: 77 attribute-keyword checks, 44 debug-flag checks, 121 transition-diagnostic checks, 573 format-diagnostic assertions across 60 cases, and 78 documentation checks.
+- Built-in/call resolution and actual annotator integration passed 182 temporary assertions on each SDK, including missing functions across machine boundaries, built-in `void` results, transition action/duplicate errors, debug-flag guards, and format diagnostics inside nested blocks, nested calls, and variable initializers. Format diagnostics are anchored to their containing statement/initializer so highlighted ranges remain valid, without duplicate diagnostics from enclosing blocks. The temporary harness was removed.
+- Temporary real-PSI regressions passed 173 checks on each local CLion 2026.1 and 2026.2 SDK. The CHI fixture uses real protocol files and the production include graph with a controlled file-index backend, covering `Initiate_Request`, `getState` parameter navigation, actual cache-entry/TBE types, owner and expression inference, inlay hints, completion copies, and scope-cache invalidation. Additional fixtures cover `main` defaults and case-insensitive false values, renamed types, missing/ambiguous defaults, machine isolation, and lexical shadowing. Temporary harnesses were removed. IDE compilation, Gradle resource processing, and error-only inspections passed before release preparation.
+- The unchanged icon assets and wiring were validated during the 1.3.0 refresh: 55 temporary PSI selection checks passed on each SDK, all 16 light/dark SVG assets rendered at 16, 32, and 64 pixels, and IntelliJ selected all eight dark variants correctly. This records the existing icon checks, not a new archive verification.
+- The 1.4.0 release build and plugin structure verification passed. The distribution ZIP is 315,006 bytes and contains one plugin JAR with 152 file entries, including 131 Java 21 classes and all 16 SVG assets. Full ZIP/JAR CRC and size checks, safe actual extraction, source-icon byte comparisons, packaged version/release notes, and all new feature classes/registrations passed. SHA-256: `E9FD726EC887CB18034732FEF39B809CC75C17F14E6C45488808280660A41326`. Audit report: `build/tmp/release140-audit.txt`. The existing 1.3.0 distribution was preserved.
+- IntelliJ Plugin Verifier 1.411 reported 1.4.0 Compatible against local CLion builds `261.22158.273` and `262.10968.176` in offline mode without downloads. Reports are under `build/reports/pluginVerifier-release-1.4.0-20261021`; this does not replace Marketplace verification for other IDE products/builds.
+
 ## 1.3.0 — 2026-10-21
 
 This release supersedes the unpublished 1.2.0 draft and includes its planned

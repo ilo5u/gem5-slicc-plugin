@@ -17,6 +17,7 @@ import com.intellij.psi.util.PsiModificationTracker;
 import com.slicc.plugin.lexer.SliccTokenTypes;
 import com.slicc.plugin.psi.*;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
@@ -166,6 +167,7 @@ public final class SliccFunctionNavigation {
     private static final class ScopeData {
         private final Set<PsiFile> files = new LinkedHashSet<>();
         private final Map<PsiFile, Set<SliccMachineDecl>> machines = new HashMap<>();
+        private List<SliccStructureDecl> cacheEntryTypes;
 
         private ScopeData(PsiFile file) {
             files.add(file);
@@ -190,17 +192,36 @@ public final class SliccFunctionNavigation {
                 }
             }
         }
+
+        private synchronized List<SliccStructureDecl> cacheEntryTypes() {
+            if (cacheEntryTypes == null) {
+                List<SliccStructureDecl> candidates = new ArrayList<>();
+                for (PsiFile file : files) {
+                    for (SliccStructureDecl structure : SliccFileSymbols.ofType(file, SliccStructureDecl.class)) {
+                        ProgressManager.checkCanceled();
+                        if ("false".equalsIgnoreCase(SliccExternalTypeNavigation.attribute(structure, "main"))) continue;
+                        String parent = SliccExternalTypeNavigation.attribute(structure, "interface");
+                        if ("AbstractCacheEntry".equals(parent)) {
+                            candidates.add(structure);
+                        }
+                    }
+                }
+                cacheEntryTypes = List.copyOf(candidates);
+            }
+            return cacheEntryTypes;
+        }
     }
 
     static final class Scope {
         final Set<PsiFile> files;
         private final Map<PsiFile, Set<SliccMachineDecl>> machines;
         private final PsiElement context;
+        private final ScopeData data;
 
         Scope(PsiElement context) {
             this.context = context;
             PsiFile file = context.getContainingFile();
-            ScopeData data = CachedValuesManager.getCachedValue(file, SCOPE_CACHE, () ->
+            data = CachedValuesManager.getCachedValue(file, SCOPE_CACHE, () ->
                     CachedValueProvider.Result.create(new ScopeData(file), PsiModificationTracker.MODIFICATION_COUNT,
                             VirtualFileManager.VFS_STRUCTURE_MODIFICATIONS,
                             ProjectRootModificationTracker.getInstance(file.getProject()),
@@ -210,7 +231,8 @@ public final class SliccFunctionNavigation {
         }
 
         private Set<SliccMachineDecl> owners(PsiElement element) {
-            SliccMachineDecl machine = PsiTreeUtil.getParentOfType(element, SliccMachineDecl.class);
+            SliccMachineDecl machine = element instanceof SliccMachineDecl declaration
+                    ? declaration : PsiTreeUtil.getParentOfType(element, SliccMachineDecl.class);
             return machine != null ? Set.of(machine) : machines.getOrDefault(element.getContainingFile(), Set.of());
         }
 
@@ -236,7 +258,29 @@ public final class SliccFunctionNavigation {
             return owners(context).size() > 1;
         }
 
-        private List<SliccFunctionDecl> freeFunctions(String name) {
+        @Nullable
+        SliccStructureDecl cacheEntryType() {
+            if (hasAmbiguousOwners()) return null;
+            SliccStructureDecl selected = null;
+            int bestRank = Integer.MAX_VALUE;
+            boolean ambiguous = false;
+            for (SliccStructureDecl candidate : data.cacheEntryTypes()) {
+                ProgressManager.checkCanceled();
+                int rank = rank(candidate);
+                if (rank < 0) continue;
+                if (rank > bestRank) continue;
+                if (rank == bestRank && selected != null) {
+                    ambiguous = true;
+                    continue;
+                }
+                selected = candidate;
+                bestRank = rank;
+                ambiguous = false;
+            }
+            return ambiguous ? null : selected;
+        }
+
+        List<SliccFunctionDecl> freeFunctions(String name) {
             int bestRank = Integer.MAX_VALUE;
             List<SliccFunctionDecl> result = new ArrayList<>();
             for (PsiFile file : files) {

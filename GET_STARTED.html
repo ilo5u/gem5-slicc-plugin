@@ -1,5 +1,5 @@
 <h2>Get Started with SLICC / gem5 Ruby Language Support</h2>
-<p>Edit and explore gem5 Ruby cache-coherence protocols in CLion or IntelliJ IDEA. This plugin supports <code>.sm</code> and <code>.slicc</code> files; it is not a plugin for the Ruby programming language. The features described below are included in plugin version <strong>1.3.0</strong>, prepared on <strong>2026-10-21</strong>.</p>
+<p>Edit and explore gem5 Ruby cache-coherence protocols in CLion or IntelliJ IDEA. This plugin supports <code>.sm</code> and <code>.slicc</code> files; it is not a plugin for the Ruby programming language. The features described below are included in plugin version <strong>1.4.0</strong>, prepared on <strong>2026-10-21</strong>.</p>
 
 <h3>1. Install the Plugin</h3>
 <ol>
@@ -7,8 +7,8 @@
   <li>Search for <strong>SLICC / gem5 Ruby Language Support</strong> and install an available version compatible with your IDE.</li>
   <li>Restart the IDE if prompted.</li>
 </ol>
-<p>If you are testing a release that is not yet available on Marketplace, install its distribution ZIP using <strong>Settings → Plugins → Settings menu → Install Plugin from Disk</strong>. For a local 1.3.0 build, select <code>build/distributions/slicc-plugin-1.3.0.zip</code>. Select the plugin ZIP itself, not a source-code archive; do not extract it first.</p>
-<p>Version 1.3.0 recognises all 30 gem5 SLICC reserved words, including <code>global</code>, <code>wakeup_port</code>, <code>check_next_cycle</code>, <code>check_stop_slots</code>, <code>check_on_cache_probe</code>, <code>defer_enqueueing</code>, and uppercase <code>OOD</code>. Attribute keywords <code>in_trans</code>, <code>out_trans</code>, and <code>main</code> work alongside <code>interface</code> and <code>desc</code>. Keywords are case-sensitive; use completion to discover them.</p>
+<p>If you are testing a release that is not yet available on Marketplace, install its distribution ZIP using <strong>Settings → Plugins → Settings menu → Install Plugin from Disk</strong>. For a local 1.4.0 build, select <code>build/distributions/slicc-plugin-1.4.0.zip</code>. Select the plugin ZIP itself, not a source-code archive; do not extract it first.</p>
+<p>Version 1.4.0 recognises all 30 gem5 SLICC reserved words, including <code>global</code>, <code>wakeup_port</code>, <code>check_next_cycle</code>, <code>check_stop_slots</code>, <code>check_on_cache_probe</code>, <code>defer_enqueueing</code>, and uppercase <code>OOD</code>. Attribute keywords <code>in_trans</code>, <code>out_trans</code>, and <code>main</code> work alongside <code>interface</code> and <code>desc</code>. Keywords are case-sensitive; use completion to discover them.</p>
 <p>For the IDE's installation instructions, see <a href="https://www.jetbrains.com/help/idea/managing-plugins.html">Install and manage plugins</a>.</p>
 
 <h3>2. Open Your Protocol Sources</h3>
@@ -18,6 +18,7 @@
   <li>Wait for project indexing to finish, then open a <code>.sm</code> or <code>.slicc</code> file. Syntax highlighting should activate automatically.</li>
 </ol>
 <p>No separate language server or gem5 build is required for editor support. Cross-file assistance depends on the declarations and includes available in your project, so opening an isolated file may provide fewer results.</p>
+<p>Rounded-square file icons distinguish <code>.sm</code> files with a blue <code>SM</code> badge and <code>.slicc</code> files with a purple <code>H</code> badge. Circular declaration badges use <code>a/e/f/m/s/t</code> for actions, enumerations, functions, machines, structures, and transitions. All icons have light/dark variants with font-independent lettering.</p>
 <p>For external C++ type navigation, keep the Ruby <code>Kconfig</code>, <code>SConscript</code>, related build scripts, and C++ sources available. Prefer the complete gem5 checkout when common type headers live outside Ruby.</p>
 
 <h3>3. Try Completion and Parameter Information</h3>
@@ -35,7 +36,7 @@
   <li><strong>Function call or declaration → definition:</strong> open the matching SLICC definition, including definitions in included files. If there is no SLICC definition, a call opens the declaration instead.</li>
   <li><strong>Function definition → calling statements:</strong> select the function's definition name to find its calls inside functions and actions.</li>
   <li><strong>Declaration-only method → calling statements:</strong> select a method name in a <code>structure</code> or <code>external_type</code> declaration when no SLICC implementation exists. Free functions without definitions support this too.</li>
-  <li><strong>Implicit action variable → type:</strong> use <code>Ctrl+B</code> or <code>Ctrl+Click</code> on implicit <code>cache_entry</code> or <code>tbe</code> inside an action to open the visible <code>Entry</code> or <code>TBE</code> declaration. Explicit variables take priority, and unrelated machine/include types are not selected.</li>
+  <li><strong>Implicit action variable → type:</strong> use <code>Ctrl+B</code> or <code>Ctrl+Click</code> on implicit <code>cache_entry</code> inside an action to open the machine's primary <code>AbstractCacheEntry</code> implementation, such as <code>Entry</code> or CHI's <code>CacheEntry</code>. Omitted <code>main</code> defaults to true; <code>main="false"</code> excludes non-default types such as <code>DirEntry</code>. Implicit <code>tbe</code> opens <code>TBE</code>. Explicit function parameters and local variables take priority, and unrelated machine/include types are not selected.</li>
   <li><strong>Structure field → usage statements:</strong> select a field's declaration name in a <code>structure</code> to find reads, writes, and initializer uses. Matching follows the receiver's type and supported inheritance, and respects parameter/local shadowing.</li>
   <li><strong>Enum constant → usage statements:</strong> select a constant name in an <code>enumeration</code> or <code>state_declaration</code> to find its uses, including qualified constants and transition state/event references. Same-named constants from unrelated enums or machines are kept separate.</li>
 </ul>
@@ -98,6 +99,16 @@ void functionalRead(Addr addr, Packet *pkt, WriteMask &amp;mask);</code></pre>
 <h3>11. Check Function-Result Types</h3>
 <p>The plugin checks function results assigned to declared variables or fields, including initializers, and function results used as arguments to other calls. For example, if <code>getCount()</code> returns <code>int</code>, <code>bool ready := getCount()</code> reports a mismatch on the result expression. A call such as <code>consumeCount(getMessage())</code> is checked against the receiving parameter; using a <code>void</code> result as a value is also an error.</p>
 <p>Inference covers simple variables, fields, nested free/member calls, and parentheses, respecting scopes and supported <code>interface</code> relationships. Overload candidates are selected from arguments, not the desired assignment type; candidates agreeing on the return type can still provide a definite result type. Reference/pointer call qualifiers are not treated as C++ conversion checks. Unknown expressions, ambiguous type declarations, conflicting overloads, malformed declarations, complex operators, indexed expressions, and indexing intentionally defer diagnostics. This does not validate every raw argument, function-body <code>return</code> statements, or complete C++ conversions. The member-name check remains separate.</p>
+
+<h3>12. Use Debug Flags and Format Diagnostics</h3>
+<p>Type <code>DPRINTF(</code> in an action to complete its first argument from literal <code>DebugFlag</code> / <code>CompoundFlag</code> declarations in related Ruby build sources. For example, <code>DPRINTF(RubySlicc, "count=%d", count)</code> takes a flag, format string, and values. <code>DPRINTFN("count=%d", count)</code> has no flag. A missing flag is an error; unknown-flag checks wait for sufficient source context.</p>
+<p>Literal-format checks compare argument counts, not types. <code>%%</code> consumes no argument, and each star width/precision consumes one; nested-call commas are kept inside their argument. Dynamic/unsupported format strings and incomplete calls defer this check. <code>APPEND_TRANSITION_COMMENT</code> also has built-in parsing, highlighting, and completion. Attribute keywords <code>block_on</code> and <code>format</code> behave like <code>main</code> / <code>desc</code>; these additions do not change the 30 reserved words.</p>
+
+<h3>13. Check Transitions and Function Names</h3>
+<p>Missing action names in transition bodies and later duplicate state/event pairs are underlined after state/event sets and includes are expanded in machine order. Missing visible free and supported scoped function names are reported without confusing incompatible overload arguments with an absent function. Dot-member errors still use the separate type-aware member check. Ambiguous/incomplete scopes, unknown receiver types, and indexing defer checks that cannot produce a definite result.</p>
+
+<h3>14. Read Declaration Descriptions</h3>
+<p>Hover a declaration or scope-resolved usage, or invoke Quick Documentation with <code>Ctrl+Q</code>, to read its <code>desc</code>. Structures, fields, enumerations/constants, functions, and actions are supported. Matching function prototypes and definitions can provide each other's description. Text is HTML-escaped with line breaks preserved; a symbol with no description does not borrow text from its enclosing declaration.</p>
 
 <h3>Troubleshooting and Current Limits</h3>
 <ul>

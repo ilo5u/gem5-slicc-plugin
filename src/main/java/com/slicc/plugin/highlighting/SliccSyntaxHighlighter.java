@@ -8,6 +8,7 @@ import com.intellij.openapi.fileTypes.SyntaxHighlighterBase;
 import com.intellij.psi.tree.IElementType;
 import com.slicc.plugin.lexer.SliccLexer;
 import com.slicc.plugin.lexer.SliccTokenTypes;
+import com.slicc.plugin.lexer.SliccBuiltinFunctions;
 import org.jetbrains.annotations.NotNull;
 
 import static com.intellij.openapi.editor.colors.TextAttributesKey.createTextAttributesKey;
@@ -202,7 +203,7 @@ public class SliccSyntaxHighlighter extends SyntaxHighlighterBase {
                 || type == SliccTokenTypes.KW_CHECK_ON_CACHE_PROBE
                 || type == SliccTokenTypes.KW_OOD
                 || type == SliccTokenTypes.KW_DEFER_ENQUEUEING
-                || type == SliccTokenTypes.KW_DPRINTF
+                || SliccBuiltinFunctions.isToken(type)
                 || type == SliccTokenTypes.KW_STATIC_CAST
                 || type == SliccTokenTypes.KW_NEW
                 || type == SliccTokenTypes.KW_IS_VALID
@@ -213,6 +214,8 @@ public class SliccSyntaxHighlighter extends SyntaxHighlighterBase {
         // Attribute keywords
         if (type == SliccTokenTypes.KW_DESC
                 || type == SliccTokenTypes.KW_MAIN
+                || type == SliccTokenTypes.KW_BLOCK_ON
+                || type == SliccTokenTypes.KW_FORMAT
                 || type == SliccTokenTypes.KW_IN_TRANS
                 || type == SliccTokenTypes.KW_OUT_TRANS
                 || type == SliccTokenTypes.KW_DEFAULT

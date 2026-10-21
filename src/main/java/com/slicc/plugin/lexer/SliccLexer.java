@@ -52,13 +52,17 @@ public class SliccLexer extends LexerBase {
         KEYWORDS.put("check_on_cache_probe", SliccTokenTypes.KW_CHECK_ON_CACHE_PROBE);
         KEYWORDS.put("OOD",              SliccTokenTypes.KW_OOD);
         KEYWORDS.put("defer_enqueueing", SliccTokenTypes.KW_DEFER_ENQUEUEING);
-        KEYWORDS.put("DPRINTF",          SliccTokenTypes.KW_DPRINTF);
+        for (String name : SliccBuiltinFunctions.names()) {
+            KEYWORDS.put(name, SliccBuiltinFunctions.tokenType(name));
+        }
         KEYWORDS.put("is_valid",         SliccTokenTypes.KW_IS_VALID);
         KEYWORDS.put("is_invalid",       SliccTokenTypes.KW_IS_INVALID);
         KEYWORDS.put("isReady",          SliccTokenTypes.KW_IS_READY);
 
         KEYWORDS.put("desc",            SliccTokenTypes.KW_DESC);
         KEYWORDS.put("main",            SliccTokenTypes.KW_MAIN);
+        KEYWORDS.put("block_on",        SliccTokenTypes.KW_BLOCK_ON);
+        KEYWORDS.put("format",          SliccTokenTypes.KW_FORMAT);
         KEYWORDS.put("in_trans",        SliccTokenTypes.KW_IN_TRANS);
         KEYWORDS.put("out_trans",       SliccTokenTypes.KW_OUT_TRANS);
         KEYWORDS.put("default",         SliccTokenTypes.KW_DEFAULT);

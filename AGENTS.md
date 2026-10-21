@@ -12,7 +12,7 @@ This file provides guidance to coding agents working in this repository. It appl
 ```bash
 # Build the plugin zip
 ./gradlew buildPlugin
-# Output: build/distributions/slicc-plugin-1.3.0.zip
+# Output: build/distributions/slicc-plugin-1.4.0.zip
 # The version is defined in build.gradle.kts.
 
 # Launch sandboxed IDE with plugin loaded (primary way to test)
@@ -25,15 +25,17 @@ There is no automated test suite (`src/test/` is absent). Test manually using re
 
 ## Release Tracking
 
-The current release version is **1.3.0**, prepared on **2026-10-21**. At the user's
-explicit request, the same-version refresh includes distinct light/dark file and
-symbol icons and implicit `cache_entry` → `Entry` navigation, replacing the
-previous 1.3.0 distribution ZIP. Its changes are recorded in the dated section of
-`CHANGELOG.md`. Record subsequent changes in a new unreleased section unless the
-user explicitly authorizes another same-version refresh. Keep the
+The current release version is **1.4.0**, prepared on **2026-10-21**. This release
+integrates corrected implicit action-variable navigation and the distinct
+light/dark file and symbol icons previously included in the 1.3.0 same-version
+refresh. Implicit `cache_entry` selects the visible primary `AbstractCacheEntry`
+implementation, respecting `main` and explicit variable shadowing. Its changes
+are recorded in the dated section of `CHANGELOG.md`; preserve the existing 1.3.0
+history. Record subsequent changes in a new unreleased section unless the user
+explicitly authorizes another same-version refresh. Keep the
 user-facing notes in `MARKETPLACE.html` synchronized with
 the `<change-notes>` section of `src/main/resources/META-INF/plugin.xml`, preserving
-previous release entries. The 1.3.0 user-facing release notes are synchronized.
+previous release entries. The 1.4.0 user-facing release notes are synchronized.
 Keep the Marketplace short-description paragraph and Description/Features/Current
 Limitations sections synchronized with `<description>` too; do not include What's
 New there. Keep `DESCRIPTION.md`, the standalone Markdown version of the product
@@ -53,6 +55,7 @@ Source file → Lexer → Parser → PSI Tree → Annotator / Reference / Comple
 ```
 
 1. **Lexer** (`lexer/SliccLexer.java`) — Hand-written lexer; tokenizes 40+ keywords, C++-style comments, `:=` assignments, and SLICC-specific keywords (`machine`, `action`, `transition`, `peek`, `enqueue`, …).
+   - `SliccBuiltinFunctions` — Shares distinct tokens and names for `DPRINTF`, `DPRINTFN`, and `APPEND_TRANSITION_COMMENT` across parsing, highlighting, completion, and call checks. These built-ins and attribute keywords such as `block_on` / `format` do not change the 30-word gem5 reserved list.
 
 2. **Parser** (`parser/SliccParser.java`) — Recursive-descent parser that builds the PSI tree. Top-level grammar handles: `machine`, `structure`, `enumeration`, `state_declaration`, `external_type`, `include`, and function declarations.
 
@@ -64,11 +67,15 @@ Source file → Lexer → Parser → PSI Tree → Annotator / Reference / Comple
    - `SliccFoldingBuilder` — code folding for machine/in_port/action/function bodies
 
 5. **Navigation & Resolution** (`navigation/`)
-   - `SliccReference` — delegates resolution to the shared `SliccGotoDeclarationHandler` resolver, preserving block scope, local/parameter shadowing, member ownership, and overload selection. Implicit action variables such as `cache_entry` / `tbe` navigate to their visible `Entry` / `TBE` declarations through the shared machine/include scope; explicit variables take priority, and missing or ambiguous types must not fall back to unrelated declarations. Find Usages compares resolved PSI declarations rather than names and declaration kinds alone.
+   - `SliccReference` — delegates resolution to the shared `SliccGotoDeclarationHandler` resolver, preserving block scope, local/parameter shadowing, member ownership, and overload selection. Implicit action `cache_entry` navigates to the machine's primary structure implementing `AbstractCacheEntry` (such as `Entry` or CHI's `CacheEntry`): omitted `main` defaults to true and case-insensitive `main="false"` excludes non-default types. Candidate lists reuse the cached function scope. `resolveImplicitVariableType` shares this selection with completion, expression inference, and inlay hints, mapping completion PSI copies through the original file. Implicit `tbe` navigates to `TBE`; explicit parameters and local variables take priority, and missing or ambiguous types must not fall back to unrelated declarations. Find Usages compares resolved PSI declarations rather than names and declaration kinds alone.
    - `SliccMessageScope` — shares message-variable visibility and type inference across completion, highlighting, reference resolution, and navigation. Explicit function parameters named `in_msg` or `out_msg` take priority throughout the function, including nested `peek` / `enqueue` bodies, and use their declared types. Without a matching parameter, implicit `in_msg` belongs to a `peek` body and `out_msg` to an `enqueue` body; each takes its type from the second argument of the nearest matching enclosing statement. Nested blocks inherit the surrounding implicit bindings.
    - `SliccActionNavigation` — resolves action references in transition action lists within machine/include scope and collects referencing transitions, including all machine roots that include a shared action file via `SliccProtocolIndex.allMachineFilesContaining`. The UI goto handler reverses action-declaration navigation into one or more transition targets, while semantic references still resolve to the action declaration itself. Both transition body forms use `TRANSITION_ACTIONS` PSI nodes.
    - `SliccFunctionNavigation` — connects prototypes, definitions, and calls by parameter-type signature and machine/include/type ownership. Calls prefer matching definitions across files; a definition name, or a declaration without any matching SLICC definition, reverses UI navigation to concrete calling statements in functions/actions without changing its semantic self-reference. `findCallSites` deduplicates by enclosing statement, not by caller. `SliccUsageSite` uses a smart PSI pointer to present complete multiline statements on one line with file/line context and navigate to the actual call offset. Labels default to 160 Unicode code points including an ellipsis; the IDE VM property `slicc.navigation.maxStatementLength` overrides the limit (minimum 1). Declarations with definitions still navigate to those definitions, and calls to declaration-only functions still navigate to their declarations. Shared prototypes are resolved in the caller's machine context; member and free-function namespaces remain separate. Scope data is cached per file against PSI modifications. Find Usages recognizes a prototype and definition as the same function, but not unrelated same-named overloads or machine/type members.
    - `SliccProtocolIndex` — shares a project-level protocol/machine/include graph with reverse file-to-scope lookups, including globals via `RubySlicc_interfaces.slicc`. File-level include nodes are cached independently; project graph dependencies cover PSI, VFS structure, and project-root changes. Preserve first matching protocol/machine behavior and all-machine unions for reverse navigation.
+   - `SliccDebugFlags` — Caches literal `DebugFlag` / `CompoundFlag` names from the related Ruby/Kconfig/SConscript source graph for `DPRINTF` first-argument completion and diagnostics. Track source/document dependencies and completeness; unavailable or incomplete sources must defer unknown-flag errors, not invent a global fallback.
+   - `SliccPrintfDiagnostics` — Checks `DPRINTF` flag presence/known-source validity and literal `DPRINTF` / `DPRINTFN` format argument counts. `DPRINTFN` has no flag; `%%` consumes none, and each star width/precision consumes one. Split outer arguments without losing nested-call commas. This is count-only, not type validation; dynamic/unsupported formats, incomplete calls, and indexing defer the relevant checks.
+   - `SliccTransitionDiagnostics` — Reports missing transition actions and later duplicate expanded state/event pairs in machine/include expansion order. Cache file/scope results with appropriate PSI/VFS/root dependencies, preserve machine isolation/cancellation, and defer ambiguous or incomplete contexts and indexing.
+   - `SliccCallDiagnostics` — Reports definitely missing visible free or supported scoped function names, not argument compatibility. Existing overloads with mismatched arguments are not absent functions; constructors/built-ins and lexical shadowing retain their guards. Dot-RHS errors belong to `SliccMemberDiagnostics`; unknown receivers and incomplete/ambiguous scope information defer checks.
    - `SliccFileSymbols` — caches declaration lists by name and declaration class against the containing PSI file, preserving source order. Reuse it in resolution and highlighting instead of repeatedly walking every file for each identifier.
    - `SliccExpressionTypes` — Conservative scope-aware expression model for function-result diagnostics. A `Session` infers supported simple variables, fields, free/member/scoped calls, nested calls, parentheses, and supported literals. Select overload candidates by argument compatibility, never the assignment target's desired return type. Compare nominal SLICC base types and supported `interface` relationships; reference/pointer call qualifiers are not C++ conversion rules, `primitive="yes"` does not make every external type numeric, and `external_name` does not merge distinct SLICC declarations. Unknown types/arguments, ambiguous owners/types, conflicting overloads, incomplete declarations, complex operators, indexed expressions, and indexing defer diagnostics rather than causing cascades. Reuse per-session resolution state and preserve cancellation; do not fall back to unrelated project-wide names.
    - `SliccTypeDiagnostics` — Reports definite mismatches for function-result assignments/initializers and function results passed to other calls, including invalid use of `void` results. Track call-containing expressions rather than validating every raw argument or function-body `return` statement. Underline the result expression or offending inner-call argument. Preserve gem5 assignment-only legacy exemptions for expected `NetDest`, actual `Set`, and the inverse interface relationship; do not apply those exemptions to function arguments or add blanket numeric/C++ implicit conversions. Keep this check separate from `SliccMemberDiagnostics`, whose dot-RHS check remains name-only.
@@ -86,6 +93,8 @@ Source file → Lexer → Parser → PSI Tree → Annotator / Reference / Comple
    - `SliccInlayHints` — Shared scope-aware model for parameter-name and implicit-type hints. Parameter hints reuse function-call resolution, including member ownership, includes, and overloads; ambiguous candidates must agree on the displayed parameter name. Omit unnamed parameters and arguments already named like the parameter. Type hints cover only the first actual use of each implicit `in_msg` / `out_msg` / `tbe` / `cache_entry` / `address` binding; preserve nearest matching message scopes and action boundaries, and suppress explicit visible variable declarations, including function parameters named `in_msg` or `out_msg`. Do not calculate hints while the project is indexing.
    - `SliccInlayPresentation` — Shared declarative presentation rendering. The independently configurable providers `slicc.parameter.names` and `slicc.implicit.types` appear under Settings → Editor → Inlay Hints → SLICC in the parameter-name and type groups. Provider previews live under `src/main/resources/inlayProviders/{id}/preview.sm`, with UI strings in `messages/SliccBundle.properties`.
 
+8. **Documentation** (`documentation/SliccDocumentationProvider.java`) — Provides hover and Quick Documentation (`Ctrl+Q`) from each selected declaration's own `desc`, including resolved usages of structures, fields, enums/constants, functions, and actions. Reuse semantic scope-aware resolution, escape HTML and preserve newlines, and permit description fallback only between matching function prototypes/definitions. Never borrow an enclosing declaration's description when a selected symbol lacks one; defer unresolved/ambiguous usages and indexing.
+
 ### Cross-File Resolution Design
 
 Two-tier scope resolution in `SliccProtocolIndex`:
@@ -102,7 +111,7 @@ Ruby subtree.
 
 ### Registration
 
-All extensions are registered in `src/main/resources/META-INF/plugin.xml` (fileType, parser definition, syntax highlighter, annotator, folding builder, completion contributor, parameter info handler, typed handler, reference contributor, structure view, goto symbol contributor, color settings page, declarative inlay-hint providers).
+All extensions are registered in `src/main/resources/META-INF/plugin.xml` (fileType, parser definition, syntax highlighter, annotator, folding builder, completion contributor, parameter info handler, typed handler, reference contributor, structure view, goto symbol contributor, color settings page, declarative inlay-hint providers, documentation provider).
 
 ## Key Extension Points (Not Yet Implemented)
 

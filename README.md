@@ -5,21 +5,22 @@
 Language support for `.sm` and `.slicc` files used in the
 [gem5](https://www.gem5.org) Ruby memory-subsystem cache coherence framework.
 
-Version **1.3.0** — **2026-10-21**. See [CHANGELOG.md](CHANGELOG.md) for the release notes.
+Version **1.4.0** — **2026-10-21**. See [CHANGELOG.md](CHANGELOG.md) for the release notes.
 
 ## How to Use
 
 1. **Install the plugin in CLion.** Follow the [installation instructions](#installing-in-clion--intellij-idea), then wait for project indexing to finish after opening a project.
 2. **Try the bundled gem5 Ruby sources.** This repository's [`ruby/`](ruby/) folder contains the main gem5 Ruby code, including SLICC protocols and related C++ implementations. Use **File → Open** in CLion to open that folder as a project. Open a protocol file such as [`MI_example-cache.sm`](ruby/protocol/MI_example-cache.sm) to try highlighting, completion, inlay hints, and `Ctrl+Click` / `Ctrl+B` navigation.
 3. **For gem5 development, open the full gem5 repository root.** Prefer opening the gem5 root as the CLion project rather than only `src/mem/ruby` or an individual protocol directory. This keeps C++ sources, `.sm` / `.slicc` files, and headers outside the Ruby subtree available together for indexing and cross-file navigation. The bundled `ruby/` folder is useful for a quick preview; resolving dependencies outside that copied subtree requires a full gem5 checkout.
+4. **Explore descriptions and diagnostics.** Hover a declaration or resolved usage, or press `Ctrl+Q`, to read its `desc`. In actions, try `DPRINTF(` for Ruby debug-flag completion; literal format argument counts and definite transition/function-name errors are checked while editing.
 
 ## Documentation
 
-Marketplace description, features, and 1.3.0 What's New are available in [MARKETPLACE.html](MARKETPLACE.html).
+Marketplace description, features, and 1.4.0 What's New are available in [MARKETPLACE.html](MARKETPLACE.html).
 The standalone Markdown description is available in [DESCRIPTION.md](DESCRIPTION.md).
 The HTML onboarding guide is available in [GET_STARTED.html](GET_STARTED.html).
 
-The product description and 1.3.0 release notes are also synchronized into
+The product description and 1.4.0 release notes are also synchronized into
 `src/main/resources/META-INF/plugin.xml` (`<description>` and `<change-notes>`).
 Keep these copies aligned when editing the Marketplace HTML. Marketplace normally
 uses the uploaded plugin's metadata; if you have selected a permanent page-level
@@ -35,8 +36,12 @@ description override, change that setting to use `plugin.xml` again. See the
 | **Syntax highlighting** | Declaration keywords (`machine`, `structure`, `action`, `transition`, …), control flow, type keywords, built-in SLICC statements (`peek`, `enqueue`, `dequeue`, `trigger`, `stall_and_wait`, `new`, `isReady`, …), attribute keywords, comments, strings, numbers |
 | **Semantic highlighting** | Machine / structure / enumeration names highlighted as class names; action / function names as function declarations; enum members as constants; structure fields as instance fields; implicit variables (`tbe`, `cache_entry`, `address`) as predefined symbols |
 | **File and symbol icons** | Rounded-square `SM` and `H` icons distinguish `.sm` and `.slicc` files; lettered circular badges identify actions, enumerations, functions, machines, structures, and transitions. Light/dark variants share font-independent outlined lettering |
+| **Additional attributes and built-ins** | Highlight/complete `block_on` and `format` like `main` / `desc`, and parse/highlight/complete `DPRINTF`, `DPRINTFN`, and `APPEND_TRANSITION_COMMENT` without changing the 30-word reserved list |
+| **Ruby debug flags and format counts** | Complete `DPRINTF`'s first argument from literal `DebugFlag` / `CompoundFlag` declarations in related build sources; report missing and definitely unknown flags. Check literal `DPRINTF` / `DPRINTFN` argument counts, including `%%`, star width/precision, and nested calls, not argument types |
+| **Transition and call diagnostics** | Report missing actions, later duplicate state/event transition pairs in include order, and missing visible free/scoped function names. Preserve machine scope and do not confuse overload argument mismatches with missing functions |
+| **Description documentation** | Hover or `Ctrl+Q` on declarations or resolved usages to display `desc`, including structures, fields, enums/constants, functions, and actions; matching function declarations/definitions can share a description |
 | **Go-to-Declaration** | `Ctrl+Click` (or `Ctrl+B`) on any identifier jumps to its definition, with block-scoped variables, parameter/local shadowing, and overload-aware resolution for functions |
-| **Implicit action variable navigation** | `Ctrl+Click` / `Ctrl+B` on implicit `cache_entry` or `tbe` in an action opens its visible `Entry` or `TBE` declaration. Explicit variables take priority; missing or ambiguous types do not select unrelated declarations |
+| **Implicit action variable navigation** | `Ctrl+Click` / `Ctrl+B` on implicit `cache_entry` opens the machine's primary `AbstractCacheEntry` implementation (such as `Entry` or CHI's `CacheEntry`); `main="false"` excludes non-default entries, while omitted `main` defaults to true. Implicit `tbe` opens `TBE`. Explicit parameters and local variables take priority; missing or ambiguous types do not select unrelated declarations |
 | **External SLICC types → C++ definitions** | `Ctrl+Click` / `Ctrl+B` on a `structure` name marked `external="yes"`, or an `external_type` declaration name, opens matching reachable gem5 C++ type definitions or supported aliases. Match namespaces and `external_name`, follow literal `Source` / `MakeInclude` entries and transitive includes, and keep unrelated Ruby roots separate. Missing definitions are errors; unavailable source context produces warnings |
 | **Action → transitions** | `Ctrl+Click` / `Ctrl+B` on an action declaration name jumps to its sole referencing transition, or opens a chooser showing transition headers and files when there are multiple matches |
 | **Structure fields / enum constants → usages** | `Ctrl+Click` / `Ctrl+B` on a structure field or enumeration constant declaration finds its actual usage statements, including reads, writes, initializers, and state/event references in transitions. Jump directly for one statement or choose among multiple statements with file/line context; preserve receiver type, inheritance, shadowing, and machine/include ownership |
@@ -78,7 +83,7 @@ file tree, namespace/alias rules, exemptions, and diagnostic boundaries.
 ### Inlay Hints
 
 Parameter names and implicit types are independently switchable under
-**Settings → Editor → Inlay Hints → SLICC** in version 1.3.0.
+**Settings → Editor → Inlay Hints → SLICC** in version 1.4.0.
 
 Parameter names follow resolved function signatures and machine/include/member
 scopes. When overload resolution is ambiguous, a hint is shown only where the
@@ -147,7 +152,7 @@ conversions. Existing member-name checking remains separate.
 
 ## Supported Reserved Words
 
-Version 1.3.0 includes highlighting and completion for all 30 words in the gem5
+Version 1.4.0 includes highlighting and completion for all 30 words in the gem5
 SLICC reserved-word list. Keywords are case-sensitive, including uppercase `OOD`.
 
 ```text
@@ -158,8 +163,37 @@ check_stop_slots check_on_cache_probe static_cast
 if is_valid is_invalid else return void new OOD defer_enqueueing
 ```
 
-`in_trans`, `out_trans`, and `main` are also recognised as attribute keywords
-alongside `interface` and `desc`. Existing additional SLICC keywords and built-ins remain supported.
+`in_trans`, `out_trans`, `main`, `block_on`, and `format` are also recognised as
+attribute keywords alongside `interface` and `desc`. `DPRINTF`, `DPRINTFN`, and
+`APPEND_TRANSITION_COMMENT` are recognised built-in calls, not additions to the
+30-word reserved list. Existing additional SLICC keywords and built-ins remain supported.
+
+### Debug Flags and Format Strings
+
+In `DPRINTF(RubySlicc, "address=%#x count=%d", address, count)`, the first argument
+is a debug flag, followed by the format string and values. Completion reads
+literal `DebugFlag` / `CompoundFlag` declarations from related Ruby build sources.
+A missing flag is an error; unavailable or incomplete source context defers
+unknown-flag errors. `DPRINTFN("count=%d", count)` has no flag argument.
+
+Literal-format diagnostics compare argument counts, not types. `%%` consumes no
+argument; in `%*.*f`, width, precision, and value each consume one. Nested function
+commas do not split outer arguments. Dynamic or unsupported formats and incomplete
+calls defer the count check; these checks do not execute SCons or preprocess C++.
+
+### Transition, Function, and Description Assistance
+
+Transition checks resolve action names and expand state/event sets to detect later
+duplicate pairs in machine/include order. Missing-function diagnostics check
+visible free and supported scoped names, not full overload argument compatibility.
+Dot-member name diagnostics remain separate. Ambiguous or incomplete scopes,
+unknown receivers, and indexing defer the corresponding checks rather than guessing.
+
+Hover a declaration or a resolved usage, or press `Ctrl+Q`, to display its own
+`desc`. Structures, fields, enumerations/constants, functions, and actions are
+supported. Descriptions preserve line breaks and escape HTML; same-signature
+function prototypes and definitions can supply each other's description. A symbol
+without a description does not inherit its enclosing declaration's text.
 
 File analysis reuses protocol/include graphs, per-file symbol indexes, and
 annotation-session C++ lookup context to avoid repeated project and PSI scans.
@@ -227,7 +261,7 @@ If Gradle cannot find the Java toolchain required by that IDE, point
 ```bash
 # Build the distributable plugin ZIP
 ./gradlew buildPlugin
-# Output: build/distributions/slicc-plugin-1.3.0.zip
+# Output: build/distributions/slicc-plugin-1.4.0.zip
 
 # Launch a sandboxed IDE with the plugin loaded (primary way to test)
 ./gradlew runIde
@@ -238,7 +272,7 @@ If Gradle cannot find the Java toolchain required by that IDE, point
 ## Installing in CLion / IntelliJ IDEA
 
 1. Go to **Settings → Plugins → ⚙ → Install Plugin from Disk…**
-2. Select `build/distributions/slicc-plugin-1.3.0.zip`
+2. Select `build/distributions/slicc-plugin-1.4.0.zip`
 3. Restart the IDE
 4. Open any `.sm` or `.slicc` file — highlighting activates immediately
 

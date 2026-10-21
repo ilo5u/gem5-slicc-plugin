@@ -106,7 +106,7 @@ public final class SliccExternalTypeNavigation {
     }
 
     @Nullable
-    static String attribute(SliccNamedElement declaration, String name) {
+    public static String attribute(SliccNamedElement declaration, String name) {
         ASTNode attributes = declaration.getNode().findChildByType(SliccTypes.ATTRIBUTE_LIST);
         if (attributes == null) return null;
         for (ASTNode attribute = attributes.getFirstChildNode(); attribute != null; attribute = attribute.getTreeNext()) {

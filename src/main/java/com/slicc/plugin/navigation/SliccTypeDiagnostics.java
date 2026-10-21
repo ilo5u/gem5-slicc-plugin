@@ -11,6 +11,7 @@ import com.intellij.psi.PsiErrorElement;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.slicc.plugin.lexer.SliccTokenTypes;
+import com.slicc.plugin.lexer.SliccBuiltinFunctions;
 import com.slicc.plugin.psi.SliccFieldDecl;
 import com.slicc.plugin.psi.SliccFunctionDecl;
 import com.slicc.plugin.psi.SliccMachineDecl;
@@ -59,7 +60,8 @@ public final class SliccTypeDiagnostics {
         }
         boolean containsCall = false;
         for (int index = 0; index + 1 < tokens.size(); index++) {
-            if (tokens.get(index).getElementType() == SliccTokenTypes.IDENTIFIER
+            if ((tokens.get(index).getElementType() == SliccTokenTypes.IDENTIFIER
+                    || SliccBuiltinFunctions.isToken(tokens.get(index).getElementType()))
                     && tokens.get(index + 1).getElementType() == SliccTokenTypes.OP_LPAREN) {
                 containsCall = true;
                 break;
@@ -70,7 +72,8 @@ public final class SliccTypeDiagnostics {
         List<Diagnostic> diagnostics = new ArrayList<>();
         for (ASTNode token : tokens) {
             ProgressManager.checkCanceled();
-            if (token.getElementType() != SliccTokenTypes.IDENTIFIER) continue;
+            if (token.getElementType() != SliccTokenTypes.IDENTIFIER
+                    && !SliccBuiltinFunctions.isToken(token.getElementType())) continue;
             SliccExpressionTypes.Call call = types.inspectCall(token.getPsi());
             if (call != null) checkArguments(token, call, types, diagnostics);
         }
