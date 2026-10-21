@@ -35,6 +35,7 @@
   <li><strong>Function call or declaration → definition:</strong> open the matching SLICC definition, including definitions in included files. If there is no SLICC definition, a call opens the declaration instead.</li>
   <li><strong>Function definition → calling statements:</strong> select the function's definition name to find its calls inside functions and actions.</li>
   <li><strong>Declaration-only method → calling statements:</strong> select a method name in a <code>structure</code> or <code>external_type</code> declaration when no SLICC implementation exists. Free functions without definitions support this too.</li>
+  <li><strong>Implicit action variable → type:</strong> use <code>Ctrl+B</code> or <code>Ctrl+Click</code> on implicit <code>cache_entry</code> or <code>tbe</code> inside an action to open the visible <code>Entry</code> or <code>TBE</code> declaration. Explicit variables take priority, and unrelated machine/include types are not selected.</li>
   <li><strong>Structure field → usage statements:</strong> select a field's declaration name in a <code>structure</code> to find reads, writes, and initializer uses. Matching follows the receiver's type and supported inheritance, and respects parameter/local shadowing.</li>
   <li><strong>Enum constant → usage statements:</strong> select a constant name in an <code>enumeration</code> or <code>state_declaration</code> to find its uses, including qualified constants and transition state/event references. Same-named constants from unrelated enums or machines are kept separate.</li>
 </ul>

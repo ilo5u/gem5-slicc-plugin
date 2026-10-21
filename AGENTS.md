@@ -25,9 +25,12 @@ There is no automated test suite (`src/test/` is absent). Test manually using re
 
 ## Release Tracking
 
-The current release version is **1.3.0**, prepared on **2026-10-21**. Its changes
-are recorded in the dated section of `CHANGELOG.md`. Record subsequent changes in
-a new unreleased section rather than changing the released feature list. Keep the
+The current release version is **1.3.0**, prepared on **2026-10-21**. At the user's
+explicit request, the same-version refresh includes distinct light/dark file and
+symbol icons and implicit `cache_entry` → `Entry` navigation, replacing the
+previous 1.3.0 distribution ZIP. Its changes are recorded in the dated section of
+`CHANGELOG.md`. Record subsequent changes in a new unreleased section unless the
+user explicitly authorizes another same-version refresh. Keep the
 user-facing notes in `MARKETPLACE.html` synchronized with
 the `<change-notes>` section of `src/main/resources/META-INF/plugin.xml`, preserving
 previous release entries. The 1.3.0 user-facing release notes are synchronized.
@@ -61,7 +64,7 @@ Source file → Lexer → Parser → PSI Tree → Annotator / Reference / Comple
    - `SliccFoldingBuilder` — code folding for machine/in_port/action/function bodies
 
 5. **Navigation & Resolution** (`navigation/`)
-   - `SliccReference` — delegates resolution to the shared `SliccGotoDeclarationHandler` resolver, preserving block scope, local/parameter shadowing, member ownership, and overload selection. Find Usages compares resolved PSI declarations rather than names and declaration kinds alone.
+   - `SliccReference` — delegates resolution to the shared `SliccGotoDeclarationHandler` resolver, preserving block scope, local/parameter shadowing, member ownership, and overload selection. Implicit action variables such as `cache_entry` / `tbe` navigate to their visible `Entry` / `TBE` declarations through the shared machine/include scope; explicit variables take priority, and missing or ambiguous types must not fall back to unrelated declarations. Find Usages compares resolved PSI declarations rather than names and declaration kinds alone.
    - `SliccMessageScope` — shares message-variable visibility and type inference across completion, highlighting, reference resolution, and navigation. Explicit function parameters named `in_msg` or `out_msg` take priority throughout the function, including nested `peek` / `enqueue` bodies, and use their declared types. Without a matching parameter, implicit `in_msg` belongs to a `peek` body and `out_msg` to an `enqueue` body; each takes its type from the second argument of the nearest matching enclosing statement. Nested blocks inherit the surrounding implicit bindings.
    - `SliccActionNavigation` — resolves action references in transition action lists within machine/include scope and collects referencing transitions, including all machine roots that include a shared action file via `SliccProtocolIndex.allMachineFilesContaining`. The UI goto handler reverses action-declaration navigation into one or more transition targets, while semantic references still resolve to the action declaration itself. Both transition body forms use `TRANSITION_ACTIONS` PSI nodes.
    - `SliccFunctionNavigation` — connects prototypes, definitions, and calls by parameter-type signature and machine/include/type ownership. Calls prefer matching definitions across files; a definition name, or a declaration without any matching SLICC definition, reverses UI navigation to concrete calling statements in functions/actions without changing its semantic self-reference. `findCallSites` deduplicates by enclosing statement, not by caller. `SliccUsageSite` uses a smart PSI pointer to present complete multiline statements on one line with file/line context and navigate to the actual call offset. Labels default to 160 Unicode code points including an ellipsis; the IDE VM property `slicc.navigation.maxStatementLength` overrides the limit (minimum 1). Declarations with definitions still navigate to those definitions, and calls to declaration-only functions still navigate to their declarations. Shared prototypes are resolved in the caller's machine context; member and free-function namespaces remain separate. Scope data is cached per file against PSI modifications. Find Usages recognizes a prototype and definition as the same function, but not unrelated same-named overloads or machine/type members.

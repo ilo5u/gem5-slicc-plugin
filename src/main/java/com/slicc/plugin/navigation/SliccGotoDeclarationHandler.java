@@ -597,8 +597,8 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         if (!isTypeRef && !isDotAccess && !isColonAccess) {
             String implicitType = getImplicitVarType(key, sourceElement);
             if (implicitType != null) {
-                PsiElement typeTarget = findTypeInAllScopes(implicitType, file);
-                if (typeTarget != null) return new PsiElement[]{typeTarget};
+                PsiElement typeTarget = resolveImplicitType(implicitType, sourceElement);
+                return typeTarget != null ? new PsiElement[]{typeTarget} : null;
             }
         }
 
@@ -879,6 +879,34 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         String typeName = IMPLICIT_VAR_TYPES.get(name);
         if (typeName == null) return null;
         return isInActionBody(element) ? typeName : null;
+    }
+
+    @Nullable
+    private static PsiElement resolveImplicitType(String typeName, PsiElement context) {
+        SliccFunctionNavigation.Scope scope = new SliccFunctionNavigation.Scope(context);
+        if (scope.hasAmbiguousOwners()) return null;
+        SliccNamedElement selected = null;
+        int bestRank = Integer.MAX_VALUE;
+        boolean ambiguous = false;
+        for (PsiFile file : scope.files) {
+            for (SliccNamedElement candidate : SliccFileSymbols.named(file, typeName)) {
+                if (!(candidate instanceof SliccStructureDecl)
+                        && !(candidate instanceof SliccExternalTypeDecl)) continue;
+                com.intellij.openapi.progress.ProgressManager.checkCanceled();
+                int rank = scope.rank(candidate);
+                if (rank < 0 || rank > bestRank) continue;
+                if (rank == bestRank && selected != null) {
+                    ambiguous = true;
+                    continue;
+                }
+                selected = candidate;
+                bestRank = rank;
+                ambiguous = false;
+            }
+        }
+        if (selected == null || ambiguous) return null;
+        PsiElement identifier = selected.getNameIdentifier();
+        return identifier != null ? identifier : selected;
     }
 
 

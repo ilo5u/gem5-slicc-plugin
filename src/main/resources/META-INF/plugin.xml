@@ -44,6 +44,12 @@
         <h2>What's New in 1.3.0</h2>
         <p>Release date: <strong>2026-10-21</strong>.</p>
 
+        <h3>File and Symbol Icons</h3>
+        <ul>
+          <li><strong>Distinct rounded-square file icons.</strong> Recognise <code>.sm</code> files by a blue badge with white <code>SM</code>, and <code>.slicc</code> files by a <code>#9673A6</code> purple badge with white <code>H</code>. Dark-theme variants reverse foreground and background colours.</li>
+          <li><strong>Lettered declaration icons.</strong> Circular badges distinguish actions (<code>a</code>), enumerations (<code>e</code>), functions (<code>f</code>), machines (<code>m</code>), structures (<code>s</code>), and transitions (<code>t</code>). File and declaration icons share font-independent outlined lettering and dedicated light/dark variants.</li>
+        </ul>
+
         <h3>Type Checking and Inlay Hints</h3>
         <ul>
           <li><strong>Function-result type errors.</strong> Check function results in assignments, variable initializers, and arguments to other calls against visible SLICC target types. Support simple variables, fields, nested free/member calls, and parentheses; select overloads from arguments rather than the desired return type. Report definite mismatches and invalid use of <code>void</code> results, while deferring unknown expressions, ambiguous type declarations, conflicting overloads, incomplete/complex expressions, and indexing. This is limited SLICC nominal-type validation, not full C++ conversions, every raw argument, or function-body return checking.</li>
@@ -54,6 +60,7 @@
 
         <h3>New Navigation</h3>
         <ul>
+          <li><strong>Navigate implicit cache entries.</strong> Use Go to Declaration on an implicit <code>cache_entry</code> inside an action to open its visible <code>Entry</code> declaration, matching <code>tbe</code> / <code>TBE</code> navigation. Preserve explicit variable shadowing and machine/include scopes.</li>
           <li><strong>Follow external SLICC types into C++ definitions.</strong> Use Go to Declaration on a <code>structure</code> name marked <code>external="yes"</code> or an <code>external_type</code> declaration name to open reachable C++ type definitions and supported aliases. Respect <code>external_name</code>, namespaces, and Ruby source-root boundaries. Missing definitions are errors; unavailable source context produces warnings. Lookup follows supported literal <code>Source</code> / <code>MakeInclude</code> / include paths without executing the build.</li>
           <li><strong>Navigate from structure fields and enum constants to usage statements.</strong> Click a declaration name to jump to its single usage or choose among multiple statements. Include reads, writes, initializers, and transition state/event references; retain type, inheritance, shadowing, and machine/include scope checks. Usage previews share the configurable length limit and jump to the actual identifier location.</li>
           <li><strong>Navigate from actions back to transitions.</strong> Use Go to Declaration on an action's name to jump to the transition that uses it, or select from a list showing transition headers and files.</li>
@@ -108,6 +115,9 @@
                   fieldName="INSTANCE"
                   language="SLICC"
                   extensions="sm;slicc"/>
+
+        <fileIconProvider implementation="com.slicc.plugin.icons.SliccFileIconProvider"/>
+        <iconProvider implementation="com.slicc.plugin.icons.SliccFileIconProvider"/>
 
         <lang.parserDefinition language="SLICC"
                                implementationClass="com.slicc.plugin.parser.SliccParserDefinition"/>
