@@ -2,6 +2,7 @@ package com.slicc.plugin.navigation;
 
 import com.intellij.codeInsight.navigation.actions.GotoDeclarationHandler;
 import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.psi.*;
 import com.intellij.psi.tree.IElementType;
@@ -16,6 +17,8 @@ import java.util.List;
 import java.util.Set;
 
 public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
+
+    private static final Logger LOG = Logger.getInstance(SliccGotoDeclarationHandler.class);
 
     // ── Overload resolution helpers ───────────────────────────────────────
 
@@ -118,12 +121,12 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         // Score each argument
         for (int i = 0; i < argTypes.size(); i++) {
             String argExpr = argTypes.get(i);
-            String paramType = paramTypes.get(i);
+            String paramType = SliccPsiUtil.withoutReference(paramTypes.get(i));
             if (argExpr == null || paramType == null) {
                 score += 1; // count matches, type unknown
                 continue;
             }
-            String argType = resolveArgType(argExpr, callSite, file);
+            String argType = SliccPsiUtil.withoutReference(resolveArgType(argExpr, callSite, file));
             if (argType == null) {
                 score += 1; // count matches, type unresolvable
             } else if (argType.equals(paramType)) {
@@ -210,7 +213,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
     @Nullable
     private static String findInterfaceOf(String typeName, PsiFile file) {
         for (PsiFile f : collectSearchFiles(file)) {
-            for (SliccStructureDecl s : PsiTreeUtil.collectElementsOfType(f, SliccStructureDecl.class)) {
+            for (SliccStructureDecl s : SliccFileSymbols.ofType(f, SliccStructureDecl.class)) {
                 if (typeName.equals(s.getName())) {
                     String iface = getStructureInterface(s);
                     if (iface != null) return iface;
@@ -219,14 +222,15 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         }
         try {
             for (PsiFile f : SliccProtocolIndex.allProjectFiles(file.getProject())) {
-                for (SliccStructureDecl s : PsiTreeUtil.collectElementsOfType(f, SliccStructureDecl.class)) {
+                for (SliccStructureDecl s : SliccFileSymbols.ofType(f, SliccStructureDecl.class)) {
                     if (typeName.equals(s.getName())) {
                         String iface = getStructureInterface(s);
                         if (iface != null) return iface;
                     }
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (ProcessCanceledException exception) { throw exception; }
+        catch (Exception ignored) {}
         return null;
     }
 
@@ -241,7 +245,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         String[] parts = argExpr.split("\\.");
         String type = resolveSimpleArgType(parts[0], callSite, file);
         for (int i = 1; i < parts.length && type != null; i++) {
-            type = resolveMemberType(type, parts[i], file);
+            type = resolveMemberType(SliccPsiUtil.baseTypeName(type), parts[i], file);
         }
         return type;
     }
@@ -250,10 +254,6 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
     @Nullable
     private static String resolveSimpleArgType(String argName, PsiElement callSite, PsiFile file) {
         if (argName.startsWith("#")) return argName.substring(1);
-        if (isInActionBody(callSite)) {
-            String implicit = IMPLICIT_VAR_TYPES.get(argName);
-            if (implicit != null) return implicit;
-        }
         if (SliccMessageScope.isMessageVariable(argName)) {
             return SliccMessageScope.resolveType(argName, callSite);
         }
@@ -261,6 +261,10 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
             if (argName.equals(field.getName())) {
                 return SliccPsiUtil.typeText(field.getNode().findChildByType(SliccTypes.TYPE_REF));
             }
+        }
+        if (isInActionBody(callSite)) {
+            String implicit = IMPLICIT_VAR_TYPES.get(argName);
+            if (implicit != null) return implicit;
         }
         String varType = resolveVarType(argName, callSite, file);
         if (varType != null) return varType;
@@ -272,10 +276,10 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
     /** Returns true if name is declared as a structure or external_type in any reachable file. */
     private static boolean isTypeName(String name, PsiFile file) {
         for (PsiFile f : collectSearchFiles(file)) {
-            for (SliccStructureDecl s : PsiTreeUtil.collectElementsOfType(f, SliccStructureDecl.class)) {
+            for (SliccStructureDecl s : SliccFileSymbols.ofType(f, SliccStructureDecl.class)) {
                 if (name.equals(s.getName())) return true;
             }
-            for (SliccExternalTypeDecl s : PsiTreeUtil.collectElementsOfType(f, SliccExternalTypeDecl.class)) {
+            for (SliccExternalTypeDecl s : SliccFileSymbols.ofType(f, SliccExternalTypeDecl.class)) {
                 if (name.equals(s.getName())) return true;
             }
         }
@@ -353,7 +357,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         List<SliccFunctionDecl> result = new ArrayList<>();
         java.util.Set<PsiFile> seen = new java.util.LinkedHashSet<>(collectSearchFiles(file));
         for (PsiFile f : seen) {
-            for (SliccFunctionDecl fn : PsiTreeUtil.collectElementsOfType(f, SliccFunctionDecl.class)) {
+            for (SliccFunctionDecl fn : SliccFileSymbols.ofType(f, SliccFunctionDecl.class)) {
                 if (isTopLevel(fn)) result.add(fn);
             }
         }
@@ -383,16 +387,17 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         List<SliccFunctionDecl> result = new ArrayList<>();
         java.util.Set<PsiFile> seen = new java.util.LinkedHashSet<>(collectSearchFiles(file));
         try { seen.addAll(SliccProtocolIndex.allProjectFiles(file.getProject())); }
+        catch (ProcessCanceledException exception) { throw exception; }
         catch (Exception ignored) {}
         for (PsiFile f : seen) {
-            for (SliccStructureDecl s : PsiTreeUtil.collectElementsOfType(f, SliccStructureDecl.class)) {
+            for (SliccStructureDecl s : SliccFileSymbols.ofType(f, SliccStructureDecl.class)) {
                 if (!typeName.equals(s.getName())) continue;
                 for (PsiElement ch : s.getChildren()) {
                     if (ch instanceof SliccFunctionDecl fn && funcName.equals(fn.getName()))
                         result.add(fn);
                 }
             }
-            for (SliccExternalTypeDecl s : PsiTreeUtil.collectElementsOfType(f, SliccExternalTypeDecl.class)) {
+            for (SliccExternalTypeDecl s : SliccFileSymbols.ofType(f, SliccExternalTypeDecl.class)) {
                 if (!typeName.equals(s.getName())) continue;
                 for (PsiElement ch : s.getChildren()) {
                     if (ch instanceof SliccFunctionDecl fn && funcName.equals(fn.getName()))
@@ -424,11 +429,12 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         if (!visitedTypes.add(typeName)) return;
         List<PsiFile> searchFiles = new ArrayList<>(collectSearchFiles(file));
         try { searchFiles.addAll(SliccProtocolIndex.allProjectFiles(file.getProject())); }
+        catch (ProcessCanceledException exception) { throw exception; }
         catch (Exception ignored) {}
 
         String ifaceToFollow = null;
         for (PsiFile f : searchFiles) {
-            for (SliccStructureDecl s : PsiTreeUtil.collectElementsOfType(f, SliccStructureDecl.class)) {
+            for (SliccStructureDecl s : SliccFileSymbols.ofType(f, SliccStructureDecl.class)) {
                 if (!typeName.equals(s.getName())) continue;
                 // Only direct children — avoids picking up function parameters (also SliccFieldDecl)
                 for (PsiElement ch : s.getChildren()) {
@@ -442,7 +448,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
                 }
                 if (ifaceToFollow == null) ifaceToFollow = getStructureInterface(s);
             }
-            for (SliccExternalTypeDecl s : PsiTreeUtil.collectElementsOfType(f, SliccExternalTypeDecl.class)) {
+            for (SliccExternalTypeDecl s : SliccFileSymbols.ofType(f, SliccExternalTypeDecl.class)) {
                 if (!typeName.equals(s.getName())) continue;
                 for (PsiElement ch : s.getChildren()) {
                     if (ch instanceof SliccFunctionDecl fn) {
@@ -462,6 +468,13 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
             @Nullable PsiElement sourceElement,
             int offset,
             Editor editor) {
+        if (sourceElement != null) {
+            SliccNamedElement declaration = findOwnDeclaration(sourceElement);
+            if (declaration != null && SliccExternalTypeNavigation.isExternal(declaration)) {
+                List<SliccCppTypeTarget> targets = SliccExternalTypeNavigation.resolve(declaration).targets();
+                if (!targets.isEmpty()) return targets.toArray(PsiElement[]::new);
+            }
+        }
         if (sourceElement != null && findOwnDeclaration(sourceElement) instanceof SliccActionDecl action) {
             SliccTransitionDecl[] transitions = SliccActionNavigation.findTransitions(action);
             if (transitions.length > 0) return transitions;
@@ -471,9 +484,16 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
             if (!function.isDefinition() && definitions.stream().anyMatch(SliccFunctionDecl::isDefinition)) {
                 return definitions.toArray(PsiElement[]::new);
             }
-            SliccCallSite[] calls = SliccFunctionNavigation.findCallSites(function);
+            SliccUsageSite[] calls = SliccFunctionNavigation.findCallSites(function);
             if (calls.length > 0) return calls;
             return definitions.toArray(PsiElement[]::new);
+        }
+        if (sourceElement != null) {
+            SliccNamedElement declaration = findOwnDeclaration(sourceElement);
+            if (declaration != null && SliccMemberNavigation.supports(declaration)) {
+                SliccUsageSite[] usages = SliccMemberNavigation.findUsages(declaration);
+                if (usages.length > 0) return usages;
+            }
         }
         return resolveTargets(sourceElement);
     }
@@ -538,17 +558,10 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         }
 
         if (!isTypeRef && !isDotAccess && !isColonAccess && SliccMessageScope.isMessageVariable(key)) {
+            SliccFieldDecl parameter = SliccMessageScope.findParameter(key, sourceElement);
+            if (parameter != null) return new PsiElement[]{parameter};
             PsiElement typeReference = SliccMessageScope.findTypeReference(key, sourceElement);
             return typeReference != null ? new PsiElement[]{typeReference} : null;
-        }
-
-        // Implicit built-in variables in ACTION bodies only → navigate to type declaration
-        if (!isDotAccess && !isColonAccess) {
-            String implicitType = getImplicitVarType(key, sourceElement);
-            if (implicitType != null) {
-                PsiElement typeTarget = findTypeInAllScopes(implicitType, file);
-                if (typeTarget != null) return new PsiElement[]{typeTarget};
-            }
         }
 
         // Dot-access: resolve the type of the object before '.' for precise member lookup
@@ -559,8 +572,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
             }
             String ownerType = resolveDotOwnerType(sourceElement);
             if (ownerType != null) {
-                List<String> dotArgTypes = extractCallArgTokens(sourceElement);
-                PsiElement member = findMemberInAllScopes(ownerType, key, file, dotArgTypes, sourceElement);
+                PsiElement member = SliccMemberNavigation.resolveField(ownerType, key, sourceElement);
                 if (member != null) return new PsiElement[]{member};
                 return null;
             }
@@ -571,7 +583,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         if (isColonAccess) {
             String enumType = resolveColonOwnerType(sourceElement);
             if (enumType != null) {
-                PsiElement member = findEnumMemberInAllScopes(enumType, key, file);
+                PsiElement member = SliccMemberNavigation.resolveConstant(enumType, key, sourceElement);
                 if (member != null) return new PsiElement[]{member};
                 return null;
             }
@@ -581,6 +593,19 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         // (e.g. `Addr address := in_msg.addr;` takes priority over Entry.address struct field)
         PsiElement localResult = isTypeRef ? null : searchLocalScope(sourceElement, key);
         if (localResult != null) return new PsiElement[]{localResult};
+
+        if (!isTypeRef && !isDotAccess && !isColonAccess) {
+            String implicitType = getImplicitVarType(key, sourceElement);
+            if (implicitType != null) {
+                PsiElement typeTarget = findTypeInAllScopes(implicitType, file);
+                if (typeTarget != null) return new PsiElement[]{typeTarget};
+            }
+        }
+
+        if (!isTypeRef && extractCallArgTokens(sourceElement) == null) {
+            SliccEnumMember constant = SliccMemberNavigation.resolveConstant(null, key, sourceElement);
+            if (constant != null) return new PsiElement[]{constant};
+        }
 
         List<String> argTypes = isTypeRef ? null : extractCallArgTokens(sourceElement);
         if (argTypes != null) {
@@ -603,7 +628,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         } catch (ProcessCanceledException e) {
             throw e;
         } catch (Exception e) {
-            System.err.println("[SLICC-GOTO] machine scope error: " + e);
+            LOG.debug("[SLICC-GOTO] machine scope error: ", e);
         }
 
         // Step 3: full protocol group
@@ -615,7 +640,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         } catch (ProcessCanceledException e) {
             throw e;
         } catch (Exception e) {
-            System.err.println("[SLICC-GOTO] group error: " + e);
+            LOG.debug("[SLICC-GOTO] group error: ", e);
         }
 
         // Step 4: global scope
@@ -627,7 +652,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         } catch (ProcessCanceledException e) {
             throw e;
         } catch (Exception e) {
-            System.err.println("[SLICC-GOTO] global error: " + e);
+            LOG.debug("[SLICC-GOTO] global error: ", e);
         }
 
         // Step 5: all project .sm/.slicc files — last resort for declarations not in include chain
@@ -639,7 +664,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         } catch (ProcessCanceledException e) {
             throw e;
         } catch (Exception e) {
-            System.err.println("[SLICC-GOTO] project error: " + e);
+            LOG.debug("[SLICC-GOTO] project error: ", e);
         }
 
         return null;
@@ -708,7 +733,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
 
     @Nullable
     private static PsiElement findEnumMemberInFile(PsiFile file, String enumType, String memberName) {
-        for (SliccEnumerationDecl e : PsiTreeUtil.collectElementsOfType(file, SliccEnumerationDecl.class)) {
+        for (SliccEnumerationDecl e : SliccFileSymbols.ofType(file, SliccEnumerationDecl.class)) {
             if (!enumType.equals(e.getName())) continue;
             for (SliccEnumMember m : PsiTreeUtil.collectElementsOfType(e, SliccEnumMember.class)) {
                 if (memberName.equals(m.getName())) {
@@ -716,7 +741,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
                 }
             }
         }
-        for (SliccStateDecl s : PsiTreeUtil.collectElementsOfType(file, SliccStateDecl.class)) {
+        for (SliccStateDecl s : SliccFileSymbols.ofType(file, SliccStateDecl.class)) {
             if (!enumType.equals(s.getName())) continue;
             for (SliccEnumMember m : PsiTreeUtil.collectElementsOfType(s, SliccEnumMember.class)) {
                 if (memberName.equals(m.getName())) {
@@ -734,8 +759,8 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         String fname = file.getVirtualFile() != null ? file.getVirtualFile().getName() : file.getName();
         try {
             List<SliccNamedElement> decls = isTypeRef
-                    ? collectTypeDeclarations(file)
-                    : collectAllDeclarations(file, isDotAccess);
+                    ? collectTypeDeclarations(file, key)
+                    : collectAllDeclarations(file, key, isDotAccess);
             List<SliccFunctionDecl> fnCandidates = null;
             for (SliccNamedElement decl : decls) {
                 String name;
@@ -747,6 +772,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
                     continue;
                 }
                 if (!key.equals(name)) continue;
+                if (decl instanceof SliccEnumMember) continue;
                 if (decl instanceof SliccFunctionDecl fn) {
                     if (fnCandidates == null) fnCandidates = new ArrayList<>();
                     fnCandidates.add(fn);
@@ -767,38 +793,33 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         } catch (ProcessCanceledException e) {
             throw e;
         } catch (Exception e) {
-            System.err.println("[SLICC-GOTO] exception in " + fname + ": " + e);
+            LOG.debug("[SLICC-GOTO] exception in " + fname + ": ", e);
         }
         return null;
     }
 
-    private static List<SliccNamedElement> collectTypeDeclarations(PsiFile file) {
+    private static List<SliccNamedElement> collectTypeDeclarations(PsiFile file, String name) {
         List<SliccNamedElement> result = new ArrayList<>();
-        result.addAll(PsiTreeUtil.collectElementsOfType(file, SliccStructureDecl.class));
-        result.addAll(PsiTreeUtil.collectElementsOfType(file, SliccExternalTypeDecl.class));
-        result.addAll(PsiTreeUtil.collectElementsOfType(file, SliccEnumerationDecl.class));
-        result.addAll(PsiTreeUtil.collectElementsOfType(file, SliccStateDecl.class));
-        result.addAll(PsiTreeUtil.collectElementsOfType(file, SliccMachineDecl.class));
+        result.addAll(SliccFileSymbols.named(file, name, SliccStructureDecl.class));
+        result.addAll(SliccFileSymbols.named(file, name, SliccExternalTypeDecl.class));
+        result.addAll(SliccFileSymbols.named(file, name, SliccEnumerationDecl.class));
+        result.addAll(SliccFileSymbols.named(file, name, SliccStateDecl.class));
+        result.addAll(SliccFileSymbols.named(file, name, SliccMachineDecl.class));
         return result;
     }
 
-    private static List<SliccNamedElement> collectAllDeclarations(PsiFile file, boolean includeMemberFunctions) {
-        List<SliccNamedElement> result = new ArrayList<>();
-        result.addAll(PsiTreeUtil.collectElementsOfType(file, SliccStructureDecl.class));
-        result.addAll(PsiTreeUtil.collectElementsOfType(file, SliccExternalTypeDecl.class));
-        result.addAll(PsiTreeUtil.collectElementsOfType(file, SliccEnumerationDecl.class));
-        result.addAll(PsiTreeUtil.collectElementsOfType(file, SliccStateDecl.class));
-        result.addAll(PsiTreeUtil.collectElementsOfType(file, SliccMachineDecl.class));
-        result.addAll(PsiTreeUtil.collectElementsOfType(file, SliccActionDecl.class));
-        result.addAll(PsiTreeUtil.collectElementsOfType(file, SliccInPortDecl.class));
-        result.addAll(PsiTreeUtil.collectElementsOfType(file, SliccOutPortDecl.class));
+    private static List<SliccNamedElement> collectAllDeclarations(PsiFile file, String name, boolean includeMemberFunctions) {
+        List<SliccNamedElement> result = collectTypeDeclarations(file, name);
+        result.addAll(SliccFileSymbols.named(file, name, SliccActionDecl.class));
+        result.addAll(SliccFileSymbols.named(file, name, SliccInPortDecl.class));
+        result.addAll(SliccFileSymbols.named(file, name, SliccOutPortDecl.class));
         // Only include machine-level fields (not local vars/params, and not struct members).
         // Struct member fields are only reachable via dot access and are resolved by findMemberInAllScopes.
-        for (SliccFieldDecl f : PsiTreeUtil.collectElementsOfType(file, SliccFieldDecl.class)) {
+        for (SliccFieldDecl f : SliccFileSymbols.named(file, name, SliccFieldDecl.class)) {
             if (isStructuralField(f) && isMachineLevelField(f)) result.add(f);
         }
-        result.addAll(PsiTreeUtil.collectElementsOfType(file, SliccEnumMember.class));
-        for (SliccFunctionDecl fn : PsiTreeUtil.collectElementsOfType(file, SliccFunctionDecl.class)) {
+        result.addAll(SliccFileSymbols.named(file, name, SliccEnumMember.class));
+        for (SliccFunctionDecl fn : SliccFileSymbols.named(file, name, SliccFunctionDecl.class)) {
             if (includeMemberFunctions || isTopLevel(fn)) result.add(fn);
         }
         return result;
@@ -825,8 +846,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
                 // 'global { }' fields are accessible without dot notation — allow them
                 com.intellij.lang.ASTNode first = cur.getNode().getFirstChildNode();
                 if (first != null
-                        && first.getElementType() == SliccTokenTypes.IDENTIFIER
-                        && "global".equals(first.getText())) {
+                        && first.getElementType() == SliccTokenTypes.KW_GLOBAL) {
                     cur = cur.getParent();
                     continue;
                 }
@@ -913,19 +933,25 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
             com.intellij.lang.ASTNode grandOwner = SliccPsiUtil.previousSignificantSibling(prevDot);
             if (grandOwner != null && grandOwner.getElementType() == SliccTokenTypes.IDENTIFIER) {
                 String grandOwnerType = resolveNodeType(grandOwner, contextElement, originalFile);
-                if (grandOwnerType != null && effectiveFile != null)
-                    return resolveMemberType(grandOwnerType, ownerName, effectiveFile);
+                if (grandOwnerType != null && effectiveFile != null) {
+                    SliccFieldDecl field = SliccMemberNavigation.resolveField(grandOwnerType, ownerName, contextElement);
+                    return field != null ? extractTypeFromField(field) : null;
+                }
                 return null; // chain broken
             }
         }
 
         // Simple identifier — resolve via implicit vars, message vars, or field declarations
+        if (SliccMessageScope.isMessageVariable(ownerName)) {
+            return SliccPsiUtil.baseTypeName(SliccMessageScope.resolveType(ownerName, contextElement));
+        }
+
+        for (SliccFieldDecl field : collectVisibleVariables(contextElement, effectiveFile)) {
+            if (ownerName.equals(field.getName())) return extractTypeFromField(field);
+        }
         if (isInActionBody(contextElement)) {
             String implicit = IMPLICIT_VAR_TYPES.get(ownerName);
             if (implicit != null) return implicit;
-        }
-        if (SliccMessageScope.isMessageVariable(ownerName)) {
-            return SliccMessageScope.resolveType(ownerName, contextElement);
         }
 
         if (effectiveFile == null) return null;
@@ -948,11 +974,12 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         if (!visited.add(structType)) return null;
         List<PsiFile> searchFiles = new ArrayList<>(collectSearchFiles(file));
         try { searchFiles.addAll(SliccProtocolIndex.allProjectFiles(file.getProject())); }
+        catch (ProcessCanceledException exception) { throw exception; }
         catch (Exception ignored) {}
 
         String ifaceToFollow = null;
         for (PsiFile f : searchFiles) {
-            for (SliccStructureDecl s : PsiTreeUtil.collectElementsOfType(f, SliccStructureDecl.class)) {
+            for (SliccStructureDecl s : SliccFileSymbols.ofType(f, SliccStructureDecl.class)) {
                 if (!structType.equals(s.getName())) continue;
                 // Fields
                 for (SliccFieldDecl field : PsiTreeUtil.collectElementsOfType(s, SliccFieldDecl.class)) {
@@ -974,7 +1001,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
                 // Record interface for chain follow (use first found)
                 if (ifaceToFollow == null) ifaceToFollow = getStructureInterface(s);
             }
-            for (SliccExternalTypeDecl s : PsiTreeUtil.collectElementsOfType(f, SliccExternalTypeDecl.class)) {
+            for (SliccExternalTypeDecl s : SliccFileSymbols.ofType(f, SliccExternalTypeDecl.class)) {
                 if (!structType.equals(s.getName())) continue;
                 for (SliccFunctionDecl fn : PsiTreeUtil.collectElementsOfType(s, SliccFunctionDecl.class)) {
                     if (memberName.equals(fn.getName())) {
@@ -1000,7 +1027,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
             if (varName.equals(field.getName())) return extractTypeFromField(field);
         }
         for (PsiFile f : collectSearchFiles(file)) {
-            for (SliccInPortDecl port : PsiTreeUtil.collectElementsOfType(f, SliccInPortDecl.class)) {
+            for (SliccInPortDecl port : SliccFileSymbols.ofType(f, SliccInPortDecl.class)) {
                 if (varName.equals(port.getName())) {
                     com.intellij.lang.ASTNode typeRef = port.getNode().findChildByType(SliccTypes.TYPE_REF);
                     if (typeRef != null) {
@@ -1018,15 +1045,18 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
     private static String extractTypeFromField(SliccFieldDecl field) {
         com.intellij.lang.ASTNode typeRef = field.getNode().findChildByType(SliccTypes.TYPE_REF);
         if (typeRef == null) return null;
-        return SliccPsiUtil.typeText(typeRef).replace("*", "");
+        return SliccPsiUtil.baseTypeName(SliccPsiUtil.typeText(typeRef));
     }
 
     private static List<PsiFile> collectSearchFiles(PsiFile file) {
         List<PsiFile> files = new ArrayList<>();
         files.add(file);
-        try { files.addAll(SliccProtocolIndex.machineFilesContaining(file)); } catch (Exception ignored) {}
-        try { files.addAll(SliccProtocolIndex.groupContaining(file)); } catch (Exception ignored) {}
-        try { files.addAll(SliccProtocolIndex.globalFiles(file.getProject())); } catch (Exception ignored) {}
+        try { files.addAll(SliccProtocolIndex.machineFilesContaining(file)); } catch (ProcessCanceledException exception) { throw exception; }
+        catch (Exception ignored) {}
+        try { files.addAll(SliccProtocolIndex.groupContaining(file)); } catch (ProcessCanceledException exception) { throw exception; }
+        catch (Exception ignored) {}
+        try { files.addAll(SliccProtocolIndex.globalFiles(file.getProject())); } catch (ProcessCanceledException exception) { throw exception; }
+        catch (Exception ignored) {}
         return files;
     }
 
@@ -1064,13 +1094,14 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
                 PsiElement m = findMemberInFile(f, structType, memberName, argTypes, callSite);
                 if (m != null) return m;
             }
-        } catch (Exception ignored) {}
+        } catch (ProcessCanceledException exception) { throw exception; }
+        catch (Exception ignored) {}
 
         // Follow interface chain: structure(SpSequencer, interface = "Sequencer", ...)
         String iface = null;
         outer:
         for (PsiFile f : searchFiles) {
-            for (SliccStructureDecl s : PsiTreeUtil.collectElementsOfType(f, SliccStructureDecl.class)) {
+            for (SliccStructureDecl s : SliccFileSymbols.ofType(f, SliccStructureDecl.class)) {
                 if (structType.equals(s.getName())) {
                     iface = getStructureInterface(s);
                     if (iface != null) break outer;
@@ -1080,7 +1111,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         if (iface == null) {
             try {
                 for (PsiFile f : SliccProtocolIndex.allProjectFiles(file.getProject())) {
-                    for (SliccStructureDecl s : PsiTreeUtil.collectElementsOfType(f, SliccStructureDecl.class)) {
+                    for (SliccStructureDecl s : SliccFileSymbols.ofType(f, SliccStructureDecl.class)) {
                         if (structType.equals(s.getName())) {
                             iface = getStructureInterface(s);
                             if (iface != null) break;
@@ -1088,7 +1119,8 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
                     }
                     if (iface != null) break;
                 }
-            } catch (Exception ignored) {}
+            } catch (ProcessCanceledException exception) { throw exception; }
+            catch (Exception ignored) {}
         }
         if (iface != null) return findMemberInAllScopes(iface, memberName, file, argTypes, callSite, visited);
         return null;
@@ -1102,7 +1134,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
     @Nullable
     private static PsiElement findMemberInFile(PsiFile file, String structType, String memberName,
                                                List<String> argTypes, PsiElement callSite) {
-        for (SliccStructureDecl s : PsiTreeUtil.collectElementsOfType(file, SliccStructureDecl.class)) {
+        for (SliccStructureDecl s : SliccFileSymbols.ofType(file, SliccStructureDecl.class)) {
             if (!structType.equals(s.getName())) continue;
             for (SliccFieldDecl f : PsiTreeUtil.collectElementsOfType(s, SliccFieldDecl.class)) {
                 if (memberName.equals(f.getName())) {
@@ -1115,7 +1147,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
             }
             if (!fnCandidates.isEmpty()) return pickBestFunction(fnCandidates, argTypes, callSite);
         }
-        for (SliccExternalTypeDecl s : PsiTreeUtil.collectElementsOfType(file, SliccExternalTypeDecl.class)) {
+        for (SliccExternalTypeDecl s : SliccFileSymbols.ofType(file, SliccExternalTypeDecl.class)) {
             if (!structType.equals(s.getName())) continue;
             List<SliccFunctionDecl> fnCandidates = new ArrayList<>();
             for (SliccFunctionDecl f : PsiTreeUtil.collectElementsOfType(s, SliccFunctionDecl.class)) {
@@ -1138,6 +1170,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
              attr != null; attr = attr.getTreeNext()) {
             if (attr.getElementType() != SliccTypes.ATTRIBUTE) continue;
             com.intellij.lang.ASTNode key = attr.getFirstChildNode();
+            while (key != null && SliccPsiUtil.isTrivia(key)) key = key.getTreeNext();
             if (key == null || key.getElementType() != SliccTokenTypes.KW_INTERFACE) continue;
             // find the STRING_LITERAL value
             for (com.intellij.lang.ASTNode n = key.getTreeNext(); n != null; n = n.getTreeNext()) {
@@ -1218,11 +1251,9 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         }
 
         if (scopeRoot instanceof SliccFunctionDecl && scopeRoot.getParent() instanceof SliccStructureDecl structure) {
-            for (PsiElement member : structure.getChildren()) {
-                if (member instanceof SliccFieldDecl field) {
-                    String name = field.getName();
-                    if (name != null && seenNames.add(name)) result.add(field);
-                }
+            for (SliccFieldDecl field : SliccMemberNavigation.visibleFields(structure, position)) {
+                String name = field.getName();
+                if (name != null && seenNames.add(name)) result.add(field);
             }
         }
 
@@ -1246,11 +1277,12 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
                 try {
                     Set<PsiFile> machineFiles = SliccProtocolIndex.machineFilesContaining(file);
                     for (PsiFile mf : machineFiles) {
-                        for (SliccMachineDecl md : PsiTreeUtil.collectElementsOfType(mf, SliccMachineDecl.class)) {
+                        for (SliccMachineDecl md : SliccFileSymbols.ofType(mf, SliccMachineDecl.class)) {
                             collectMachineLevelFields(md, result, seenNames);
                         }
                     }
-                } catch (Exception ignored) {}
+                } catch (ProcessCanceledException exception) { throw exception; }
+                catch (Exception ignored) {}
             }
         }
 
@@ -1267,8 +1299,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
             } else if (ch instanceof SliccStructureDecl struct) {
                 // Include fields from 'global { }' blocks (accessible without dot)
                 com.intellij.lang.ASTNode first = struct.getNode().getFirstChildNode();
-                if (first != null && first.getElementType() == SliccTokenTypes.IDENTIFIER
-                        && "global".equals(first.getText())) {
+                if (first != null && first.getElementType() == SliccTokenTypes.KW_GLOBAL) {
                     for (SliccFieldDecl gf : PsiTreeUtil.collectElementsOfType(struct, SliccFieldDecl.class)) {
                         String n = gf.getName();
                         if (n != null && seenNames.add(n)) result.add(gf);
@@ -1287,19 +1318,22 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
                 result = searchInFile(f, typeName, true, false, null, "machine", null, null);
                 if (result != null) return result;
             }
-        } catch (Exception ignored) {}
+        } catch (ProcessCanceledException exception) { throw exception; }
+        catch (Exception ignored) {}
         try {
             for (PsiFile f : SliccProtocolIndex.groupContaining(file)) {
                 result = searchInFile(f, typeName, true, false, null, "protocol", null, null);
                 if (result != null) return result;
             }
-        } catch (Exception ignored) {}
+        } catch (ProcessCanceledException exception) { throw exception; }
+        catch (Exception ignored) {}
         try {
             for (PsiFile f : SliccProtocolIndex.globalFiles(file.getProject())) {
                 result = searchInFile(f, typeName, true, false, null, "global", null, null);
                 if (result != null) return result;
             }
-        } catch (Exception ignored) {}
+        } catch (ProcessCanceledException exception) { throw exception; }
+        catch (Exception ignored) {}
         return null;
     }
 }

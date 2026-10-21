@@ -18,6 +18,7 @@ public interface SliccTokenTypes {
     IElementType KW_TRANSITION       = new SliccTokenType("transition");
     IElementType KW_INCLUDE          = new SliccTokenType("include");
     IElementType KW_PROTOCOL         = new SliccTokenType("protocol");
+    IElementType KW_GLOBAL           = new SliccTokenType("global");
     // ...... C++ compatible keywords .................................................................................................................................
     IElementType KW_VOID             = new SliccTokenType("void");
     IElementType KW_IF               = new SliccTokenType("if");
@@ -32,7 +33,13 @@ public interface SliccTokenTypes {
     IElementType KW_DEQUEUE          = new SliccTokenType("dequeue");
     IElementType KW_TRIGGER          = new SliccTokenType("trigger");
     IElementType KW_STALL_AND_WAIT   = new SliccTokenType("stall_and_wait");
+    IElementType KW_WAKEUP_PORT      = new SliccTokenType("wakeup_port");
     IElementType KW_CHECK_ALLOCATE   = new SliccTokenType("check_allocate");
+    IElementType KW_CHECK_NEXT_CYCLE = new SliccTokenType("check_next_cycle");
+    IElementType KW_CHECK_STOP_SLOTS = new SliccTokenType("check_stop_slots");
+    IElementType KW_CHECK_ON_CACHE_PROBE = new SliccTokenType("check_on_cache_probe");
+    IElementType KW_OOD              = new SliccTokenType("OOD");
+    IElementType KW_DEFER_ENQUEUEING  = new SliccTokenType("defer_enqueueing");
     IElementType KW_DPRINTF          = new SliccTokenType("DPRINTF");
     IElementType KW_SET_CACHE_ENTRY  = new SliccTokenType("set_cache_entry");
     IElementType KW_UNSET_CACHE_ENTRY= new SliccTokenType("unset_cache_entry");
@@ -44,6 +51,9 @@ public interface SliccTokenTypes {
 
     // ...... Attribute / qualifier keywords ............................................................................................................
     IElementType KW_DESC             = new SliccTokenType("desc");
+    IElementType KW_MAIN             = new SliccTokenType("main");
+    IElementType KW_IN_TRANS         = new SliccTokenType("in_trans");
+    IElementType KW_OUT_TRANS        = new SliccTokenType("out_trans");
     IElementType KW_DEFAULT          = new SliccTokenType("default");
     IElementType KW_NETWORK          = new SliccTokenType("network");
     IElementType KW_VIRTUAL_NETWORK  = new SliccTokenType("virtual_network");

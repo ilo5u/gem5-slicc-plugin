@@ -5,13 +5,13 @@ import com.intellij.codeInsight.lookup.LookupElementBuilder;
 import com.intellij.patterns.PlatformPatterns;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
-import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.util.ProcessingContext;
 import com.slicc.plugin.icons.SliccIcons;
 import com.slicc.plugin.lang.SliccLanguage;
 import com.slicc.plugin.lexer.SliccTokenTypes;
 import com.slicc.plugin.navigation.SliccGotoDeclarationHandler;
 import com.slicc.plugin.navigation.SliccMessageScope;
+import com.slicc.plugin.navigation.SliccFileSymbols;
 import com.slicc.plugin.psi.*;
 import org.jetbrains.annotations.NotNull;
 
@@ -92,13 +92,11 @@ public class SliccCompletionContributor extends CompletionContributor {
                                                       @NotNull CompletionResultSet result) {
         for (SliccFieldDecl field : SliccGotoDeclarationHandler.collectVisibleVariables(position, originalFile)) {
             String name = field.getName();
-            if (name == null || SliccMessageScope.isMessageVariable(name)) continue;
+            if (name == null || SliccMessageScope.isMessageVariable(name)
+                    && SliccMessageScope.findParameter(name, position) == null) continue;
             com.intellij.lang.ASTNode tr = field.getNode().findChildByType(SliccTypes.TYPE_REF);
             String typeName = "";
-            if (tr != null) {
-                com.intellij.lang.ASTNode id = tr.findChildByType(SliccTokenTypes.IDENTIFIER);
-                if (id != null) typeName = id.getText();
-            }
+            if (tr != null) typeName = SliccPsiUtil.typeText(tr);
             result.addElement(LookupElementBuilder.create(name)
                     .withIcon(SliccIcons.STRUCTURE)
                     .withTypeText(typeName)
@@ -110,7 +108,8 @@ public class SliccCompletionContributor extends CompletionContributor {
     private static void addImplicitVarCompletions(@NotNull PsiElement position,
                                                    @NotNull CompletionResultSet result) {
         for (String name : List.of("in_msg", "out_msg")) {
-            if (SliccMessageScope.isVisible(name, position)) {
+            if (SliccMessageScope.isVisible(name, position)
+                    && SliccMessageScope.findParameter(name, position) == null) {
                 result.addElement(LookupElementBuilder.create(name)
                         .withIcon(SliccIcons.STRUCTURE)
                         .withTypeText(SliccMessageScope.resolveType(name, position))
@@ -138,7 +137,7 @@ public class SliccCompletionContributor extends CompletionContributor {
     private static final List<String> DECL_KEYWORDS = List.of(
             "machine", "structure", "enumeration", "external_type",
             "state_declaration", "in_port", "out_port",
-            "action", "transition", "include"
+            "action", "transition", "include", "protocol", "global"
     );
 
     private static final List<String> CONTROL_KEYWORDS = List.of(
@@ -152,12 +151,14 @@ public class SliccCompletionContributor extends CompletionContributor {
     private static final List<String> BUILTIN_STMTS = List.of(
             "peek", "enqueue", "dequeue", "trigger", "stall_and_wait",
             "check_allocate", "error", "assert",
+            "wakeup_port", "check_next_cycle", "check_stop_slots", "check_on_cache_probe",
+            "defer_enqueueing", "static_cast", "is_valid", "is_invalid", "new", "OOD",
             "DPRINTF",
             "set_cache_entry", "unset_cache_entry", "set_tbe", "unset_tbe"
     );
 
     private static final List<String> ATTR_KEYWORDS = List.of(
-            "desc", "default", "network", "virtual_network",
+            "desc", "main", "in_trans", "out_trans", "default", "network", "virtual_network",
             "vnet_type", "rank", "interface", "external", "primitive", "ordered"
     );
 
@@ -237,7 +238,7 @@ public class SliccCompletionContributor extends CompletionContributor {
     private static void addFileSymbols(PsiFile file, CompletionResultSet result, boolean skipActions) {
         // Actions
         if (!skipActions) {
-            for (SliccActionDecl a : PsiTreeUtil.collectElementsOfType(file, SliccActionDecl.class)) {
+            for (SliccActionDecl a : SliccFileSymbols.ofType(file, SliccActionDecl.class)) {
                 String name = a.getName();
                 if (name != null) {
                     result.addElement(LookupElementBuilder.create(name)
@@ -272,7 +273,7 @@ public class SliccCompletionContributor extends CompletionContributor {
             }
         }
         // Structures / types
-        for (SliccStructureDecl s : PsiTreeUtil.collectElementsOfType(file, SliccStructureDecl.class)) {
+        for (SliccStructureDecl s : SliccFileSymbols.ofType(file, SliccStructureDecl.class)) {
             String name = s.getName();
             if (name != null) {
                 result.addElement(LookupElementBuilder.create(name)
@@ -282,7 +283,7 @@ public class SliccCompletionContributor extends CompletionContributor {
             }
         }
         // Enumerations
-        for (SliccEnumerationDecl e : PsiTreeUtil.collectElementsOfType(file, SliccEnumerationDecl.class)) {
+        for (SliccEnumerationDecl e : SliccFileSymbols.ofType(file, SliccEnumerationDecl.class)) {
             String name = e.getName();
             if (name != null) {
                 result.addElement(LookupElementBuilder.create(name)

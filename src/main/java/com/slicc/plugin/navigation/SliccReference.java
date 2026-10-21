@@ -57,13 +57,14 @@ public class SliccReference extends PsiReferenceBase<PsiElement> {
         if (!myIsTypeRef) {
             for (SliccFieldDecl field : SliccGotoDeclarationHandler.collectVisibleVariables(myElement)) {
                 String name = field.getName();
-                if (name != null && !SliccMessageScope.isMessageVariable(name) && !variants.contains(name)) {
+                if (name != null && (!SliccMessageScope.isMessageVariable(name)
+                        || SliccMessageScope.findParameter(name, myElement) != null) && !variants.contains(name)) {
                     variants.add(name);
                 }
             }
         }
         for (String name : List.of("in_msg", "out_msg")) {
-            if (SliccMessageScope.isVisible(name, myElement)) variants.add(name);
+            if (SliccMessageScope.isVisible(name, myElement) && !variants.contains(name)) variants.add(name);
         }
         try {
             for (PsiFile f : SliccProtocolIndex.groupContaining(file))

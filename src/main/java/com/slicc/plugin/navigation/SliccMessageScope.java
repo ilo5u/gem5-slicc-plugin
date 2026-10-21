@@ -5,7 +5,11 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.TokenType;
 import com.intellij.psi.tree.IElementType;
+import com.intellij.psi.util.PsiTreeUtil;
 import com.slicc.plugin.lexer.SliccTokenTypes;
+import com.slicc.plugin.psi.SliccFieldDecl;
+import com.slicc.plugin.psi.SliccFunctionDecl;
+import com.slicc.plugin.psi.SliccPsiUtil;
 import com.slicc.plugin.psi.SliccTypes;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -19,17 +23,37 @@ public final class SliccMessageScope {
     }
 
     public static boolean isVisible(@NotNull String name, @NotNull PsiElement position) {
-        return findScope(name, position) != null;
+        return findParameter(name, position) != null || findScope(name, position) != null;
+    }
+
+    @Nullable
+    public static SliccFieldDecl findParameter(@NotNull String name, @NotNull PsiElement position) {
+        if (!isMessageVariable(name)) return null;
+        SliccFunctionDecl function = PsiTreeUtil.getParentOfType(position, SliccFunctionDecl.class);
+        if (function == null) return null;
+        ASTNode parameters = function.getNode().findChildByType(SliccTypes.PARAM_LIST);
+        if (parameters == null) return null;
+        for (ASTNode parameter = parameters.getFirstChildNode(); parameter != null; parameter = parameter.getTreeNext()) {
+            if (parameter.getPsi() instanceof SliccFieldDecl field && name.equals(field.getName())) return field;
+        }
+        return null;
     }
 
     @Nullable
     public static String resolveType(@NotNull String name, @NotNull PsiElement position) {
         PsiElement typeReference = findTypeReference(name, position);
-        return typeReference != null ? typeReference.getText() : null;
+        if (typeReference == null) return null;
+        return typeReference.getNode().getElementType() == SliccTypes.TYPE_REF
+                ? SliccPsiUtil.typeText(typeReference.getNode()) : typeReference.getText();
     }
 
     @Nullable
     public static PsiElement findTypeReference(@NotNull String name, @NotNull PsiElement position) {
+        SliccFieldDecl parameter = findParameter(name, position);
+        if (parameter != null) {
+            ASTNode type = parameter.getNode().findChildByType(SliccTypes.TYPE_REF);
+            return type != null ? type.getPsi() : null;
+        }
         ASTNode scope = findScope(name, position);
         if (scope == null) return null;
         ASTNode argument = nextSignificant(scope.getFirstChildNode());

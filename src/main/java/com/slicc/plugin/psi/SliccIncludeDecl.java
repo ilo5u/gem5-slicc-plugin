@@ -43,7 +43,6 @@ public final class SliccIncludeDecl extends SliccCompositeElement {
         int startOffset = strNode.getStartOffsetInParent() + 1;
         int endOffset   = startOffset + path.length();
 
-        System.err.println("[SLICC-INCLUDE] getReference() path='" + path + "'");
         return new PsiReferenceBase<PsiElement>(this, new TextRange(startOffset, endOffset)) {
             @Override
             @Nullable
@@ -53,11 +52,7 @@ public final class SliccIncludeDecl extends SliccCompositeElement {
                 VirtualFile dir = vf.getParent();
                 if (dir == null) return null;
                 VirtualFile target = dir.findFileByRelativePath(path);
-                if (target == null) {
-                    System.err.println("[SLICC-INCLUDE] resolve FAIL: '" + path + "' not found relative to " + dir.getPath());
-                    return null;
-                }
-                System.err.println("[SLICC-INCLUDE] resolve OK: " + target.getPath());
+                if (target == null) return null;
                 return PsiManager.getInstance(getElement().getProject()).findFile(target);
             }
 

@@ -171,10 +171,7 @@ public class SliccParameterInfoHandler implements ParameterInfoHandler<PsiElemen
             if (!(ch.getPsi() instanceof SliccFieldDecl field)) continue;
             String typeName = "";
             com.intellij.lang.ASTNode tr = field.getNode().findChildByType(SliccTypes.TYPE_REF);
-            if (tr != null) {
-                com.intellij.lang.ASTNode id = tr.findChildByType(SliccTokenTypes.IDENTIFIER);
-                if (id != null) typeName = id.getText();
-            }
+            if (tr != null) typeName = SliccPsiUtil.typeText(tr);
             String paramName = field.getName() != null ? field.getName() : "";
             result.add(new String[]{typeName, paramName});
         }

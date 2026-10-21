@@ -20,6 +20,22 @@ public final class SliccPsiUtil {
         return text.toString();
     }
 
+    @Nullable
+    public static String withoutReference(@Nullable String type) {
+        if (type == null) return null;
+        int end = type.length();
+        while (end > 0 && type.charAt(end - 1) == '&') end--;
+        return type.substring(0, end);
+    }
+
+    @Nullable
+    public static String baseTypeName(@Nullable String type) {
+        if (type == null) return null;
+        int end = type.length();
+        while (end > 0 && (type.charAt(end - 1) == '*' || type.charAt(end - 1) == '&')) end--;
+        return type.substring(0, end);
+    }
+
     public static String declarationLocation(PsiElement declaration) {
         SliccNamedElement owner = PsiTreeUtil.getParentOfType(declaration,
                 SliccMachineDecl.class, SliccStructureDecl.class, SliccExternalTypeDecl.class);

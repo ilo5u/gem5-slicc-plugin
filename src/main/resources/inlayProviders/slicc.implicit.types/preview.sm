@@ -1,0 +1,12 @@
+structure(RequestMsg) {
+    Addr destination;
+}
+
+action(forwardRequest, "f", desc="Forward a request") {
+    peek(requestQueue, RequestMsg) {
+        Addr destination := in_msg/*<# : RequestMsg #>*/.destination;
+        enqueue(responseQueue, RequestMsg) {
+            out_msg/*<# : RequestMsg #>*/.destination := destination;
+        }
+    }
+}

@@ -14,24 +14,33 @@ import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 
-public final class SliccCallSite extends FakePsiElement {
+public final class SliccUsageSite extends FakePsiElement {
 
     public static final String MAX_STATEMENT_LENGTH_PROPERTY = "slicc.navigation.maxStatementLength";
     public static final int DEFAULT_MAX_STATEMENT_LENGTH = 160;
 
     private final SmartPsiElementPointer<PsiElement> reference;
     private final PsiManager manager;
+    private final Icon icon;
 
-    public SliccCallSite(@NotNull PsiElement call) {
+    public SliccUsageSite(@NotNull PsiElement call) {
+        this(call, SliccIcons.FUNCTION);
+    }
+
+    public SliccUsageSite(@NotNull PsiElement call, @NotNull Icon icon) {
         reference = SmartPointerManager.getInstance(call.getProject()).createSmartPsiElementPointer(call);
         manager = call.getManager();
+        this.icon = icon;
     }
 
     static PsiElement statementOf(PsiElement call) {
         for (PsiElement element = call.getParent(); element != null && !(element instanceof PsiFile);
              element = element.getParent()) {
             if (element instanceof SliccFunctionDecl || element instanceof SliccActionDecl) break;
-            if (element instanceof SliccFieldDecl || element.getNode().getElementType() == SliccTypes.STATEMENT) {
+            if (element instanceof SliccFieldDecl || element instanceof SliccEnumMember
+                    || element instanceof SliccTransitionDecl || element instanceof SliccInPortDecl
+                    || element instanceof SliccOutPortDecl || element instanceof SliccMachineDecl
+                    || element.getNode().getElementType() == SliccTypes.STATEMENT) {
                 return element;
             }
         }
@@ -41,7 +50,7 @@ public final class SliccCallSite extends FakePsiElement {
     @Override
     public @NotNull String getName() {
         PsiElement call = reference.getElement();
-        if (call == null) return "<invalid call>";
+        if (call == null) return "<invalid usage>";
         StringBuilder text = new StringBuilder();
         PsiTreeUtil.processElements(statementOf(call), element -> {
             if (element.getFirstChild() != null) return true;
@@ -66,13 +75,14 @@ public final class SliccCallSite extends FakePsiElement {
         Document document = PsiDocumentManager.getInstance(getProject()).getDocument(file);
         String location = file.getName();
         if (document != null) location += ":" + (document.getLineNumber(call.getTextOffset()) + 1);
-        SliccNamedElement caller = PsiTreeUtil.getParentOfType(call, SliccFunctionDecl.class, SliccActionDecl.class);
+        SliccNamedElement caller = PsiTreeUtil.getParentOfType(call, SliccFunctionDecl.class, SliccActionDecl.class,
+                SliccInPortDecl.class, SliccTransitionDecl.class);
         return caller == null ? location : caller.getName() + " — " + location;
     }
 
     @Override
     public Icon getIcon(boolean unused) {
-        return SliccIcons.FUNCTION;
+        return icon;
     }
 
     @Override

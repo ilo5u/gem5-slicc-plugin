@@ -2,7 +2,10 @@ package com.slicc.plugin.navigation;
 
 import com.intellij.lang.ASTNode;
 import com.intellij.openapi.progress.ProgressManager;
+import com.intellij.openapi.project.DumbService;
+import com.intellij.openapi.roots.ProjectRootModificationTracker;
 import com.intellij.openapi.util.Key;
+import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiManager;
@@ -26,10 +29,12 @@ public final class SliccFunctionNavigation {
     @NotNull
     public static List<SliccFunctionDecl> definitions(@NotNull SliccFunctionDecl declaration) {
         if (declaration.isDefinition()) return List.of(declaration);
+        String name = declaration.getName();
+        if (name == null) return List.of(declaration);
         Scope scope = new Scope(declaration);
         List<SliccFunctionDecl> result = new ArrayList<>();
         for (PsiFile file : scope.files) {
-            for (SliccFunctionDecl candidate : PsiTreeUtil.collectElementsOfType(file, SliccFunctionDecl.class)) {
+            for (SliccFunctionDecl candidate : SliccFileSymbols.named(file, name, SliccFunctionDecl.class)) {
                 ProgressManager.checkCanceled();
                 if (candidate.isDefinition() && sameSignature(declaration, candidate)
                         && scope.sameOwner(declaration, candidate)) result.add(candidate);
@@ -50,6 +55,16 @@ public final class SliccFunctionNavigation {
         List<String> arguments = SliccGotoDeclarationHandler.extractCallArgTokens(call);
         if (arguments == null) return List.of();
         Scope scope = new Scope(call);
+        SliccExpressionTypes.Call typedCall = new SliccExpressionTypes.Session(call).inspectCall(call);
+        if (typedCall != null && !typedCall.viable().isEmpty()) {
+            Set<SliccFunctionDecl> targets = new LinkedHashSet<>();
+            for (SliccFunctionDecl candidate : typedCall.viable()) {
+                for (SliccFunctionDecl definition : definitions(candidate)) {
+                    if (scope.rank(definition) >= 0) targets.add(definition);
+                }
+            }
+            return new ArrayList<>(targets);
+        }
         ASTNode previous = SliccPsiUtil.previousSignificantSibling(call.getNode());
         boolean member = previous != null && previous.getElementType() == SliccTokenTypes.OP_DOT;
         boolean scoped = previous != null && previous.getElementType() == SliccTokenTypes.OP_SCOPE;
@@ -88,11 +103,11 @@ public final class SliccFunctionNavigation {
     }
 
     @NotNull
-    public static SliccCallSite[] findCallSites(@NotNull SliccFunctionDecl function) {
+    public static SliccUsageSite[] findCallSites(@NotNull SliccFunctionDecl function) {
         Set<PsiFile> files = new LinkedHashSet<>(new Scope(function).files);
         files.addAll(SliccProtocolIndex.allProjectFiles(function.getProject()));
         Set<PsiElement> statements = new LinkedHashSet<>();
-        List<SliccCallSite> targets = new ArrayList<>();
+        List<SliccUsageSite> targets = new ArrayList<>();
         for (PsiFile file : files) {
             for (PsiElement reference : PsiTreeUtil.collectElements(file,
                     element -> function.getName() != null && function.getName().equals(element.getText())
@@ -104,12 +119,12 @@ public final class SliccFunctionNavigation {
                 if (SliccGotoDeclarationHandler.extractCallArgTokens(reference) == null) continue;
                 PsiElement resolved = SliccGotoDeclarationHandler.resolveReference(reference);
                 if (resolved instanceof SliccFunctionDecl target && isSameFunction(function, target)
-                        && statements.add(SliccCallSite.statementOf(reference))) {
-                    targets.add(new SliccCallSite(reference));
+                        && statements.add(SliccUsageSite.statementOf(reference))) {
+                    targets.add(new SliccUsageSite(reference));
                 }
             }
         }
-        return targets.toArray(SliccCallSite[]::new);
+        return targets.toArray(SliccUsageSite[]::new);
     }
 
     private static boolean sameSignature(SliccFunctionDecl first, SliccFunctionDecl second) {
@@ -158,7 +173,7 @@ public final class SliccFunctionNavigation {
             files.addAll(SliccProtocolIndex.groupContaining(file));
             files.addAll(SliccProtocolIndex.globalFiles(file.getProject()));
             for (PsiFile candidate : new ArrayList<>(files)) {
-                for (SliccMachineDecl machine : PsiTreeUtil.collectElementsOfType(candidate, SliccMachineDecl.class)) {
+                for (SliccMachineDecl machine : SliccFileSymbols.ofType(candidate, SliccMachineDecl.class)) {
                     ProgressManager.checkCanceled();
                     Set<PsiFile> included = new LinkedHashSet<>();
                     for (SliccIncludeDecl include : PsiTreeUtil.collectElementsOfType(candidate, SliccIncludeDecl.class)) {
@@ -177,16 +192,19 @@ public final class SliccFunctionNavigation {
         }
     }
 
-    private static final class Scope {
-        private final Set<PsiFile> files;
+    static final class Scope {
+        final Set<PsiFile> files;
         private final Map<PsiFile, Set<SliccMachineDecl>> machines;
         private final PsiElement context;
 
-        private Scope(PsiElement context) {
+        Scope(PsiElement context) {
             this.context = context;
             PsiFile file = context.getContainingFile();
             ScopeData data = CachedValuesManager.getCachedValue(file, SCOPE_CACHE, () ->
-                    CachedValueProvider.Result.create(new ScopeData(file), PsiModificationTracker.MODIFICATION_COUNT));
+                    CachedValueProvider.Result.create(new ScopeData(file), PsiModificationTracker.MODIFICATION_COUNT,
+                            VirtualFileManager.VFS_STRUCTURE_MODIFICATIONS,
+                            ProjectRootModificationTracker.getInstance(file.getProject()),
+                            DumbService.getInstance(file.getProject()).getModificationTracker()));
             files = data.files;
             machines = data.machines;
         }
@@ -206,7 +224,7 @@ public final class SliccFunctionNavigation {
             return firstOwners.stream().anyMatch(owner -> secondOwners.stream().anyMatch(other -> equivalent(owner, other)));
         }
 
-        private int rank(PsiElement candidate) {
+        int rank(PsiElement candidate) {
             Set<SliccMachineDecl> contextOwners = owners(context);
             Set<SliccMachineDecl> candidateOwners = owners(candidate);
             if (candidateOwners.stream().anyMatch(owner -> contextOwners.stream()
@@ -214,12 +232,16 @@ public final class SliccFunctionNavigation {
             return candidateOwners.isEmpty() ? 1 : -1;
         }
 
+        boolean hasAmbiguousOwners() {
+            return owners(context).size() > 1;
+        }
+
         private List<SliccFunctionDecl> freeFunctions(String name) {
             int bestRank = Integer.MAX_VALUE;
             List<SliccFunctionDecl> result = new ArrayList<>();
             for (PsiFile file : files) {
-                for (SliccFunctionDecl function : PsiTreeUtil.collectElementsOfType(file, SliccFunctionDecl.class)) {
-                    if (!name.equals(function.getName()) || typeOwner(function) != null) continue;
+                for (SliccFunctionDecl function : SliccFileSymbols.named(file, name, SliccFunctionDecl.class)) {
+                    if (typeOwner(function) != null) continue;
                     int rank = rank(function);
                     if (rank < 0 || rank > bestRank) continue;
                     if (rank < bestRank) {
@@ -234,19 +256,7 @@ public final class SliccFunctionNavigation {
 
         private List<SliccFunctionDecl> members(String type, String name, Set<String> visited) {
             if (!visited.add(type)) return List.of();
-            PsiElement selected = null;
-            int bestRank = Integer.MAX_VALUE;
-            for (PsiFile file : files) {
-                for (SliccNamedElement candidate : PsiTreeUtil.collectElementsOfType(file, SliccNamedElement.class)) {
-                    if (!(candidate instanceof SliccStructureDecl || candidate instanceof SliccExternalTypeDecl)
-                            || !type.equals(candidate.getName())) continue;
-                    int rank = rank(candidate);
-                    if (rank >= 0 && rank < bestRank) {
-                        selected = candidate;
-                        bestRank = rank;
-                    }
-                }
-            }
+            PsiElement selected = typeDeclaration(type, false);
             if (selected == null) return List.of();
             List<SliccFunctionDecl> result = directMembers(selected, name);
             if (!result.isEmpty()) return result;
@@ -255,6 +265,26 @@ public final class SliccFunctionNavigation {
                 if (parent != null) return members(parent, name, visited);
             }
             return List.of();
+        }
+
+        SliccNamedElement typeDeclaration(String type, boolean enumeration) {
+            SliccNamedElement selected = null;
+            int bestRank = Integer.MAX_VALUE;
+            for (PsiFile file : files) {
+                for (SliccNamedElement candidate : SliccFileSymbols.named(file, type)) {
+                    boolean matchesKind = enumeration
+                            ? candidate instanceof SliccEnumerationDecl || candidate instanceof SliccStateDecl
+                            : candidate instanceof SliccStructureDecl || candidate instanceof SliccExternalTypeDecl;
+                    if (!matchesKind) continue;
+                    ProgressManager.checkCanceled();
+                    int rank = rank(candidate);
+                    if (rank >= 0 && rank < bestRank) {
+                        selected = candidate;
+                        bestRank = rank;
+                    }
+                }
+            }
+            return selected;
         }
     }
 }

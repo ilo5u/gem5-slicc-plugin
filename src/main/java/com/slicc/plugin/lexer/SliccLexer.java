@@ -31,6 +31,7 @@ public class SliccLexer extends LexerBase {
         KEYWORDS.put("transition",         SliccTokenTypes.KW_TRANSITION);
         KEYWORDS.put("include",            SliccTokenTypes.KW_INCLUDE);
         KEYWORDS.put("protocol",           SliccTokenTypes.KW_PROTOCOL);
+        KEYWORDS.put("global",             SliccTokenTypes.KW_GLOBAL);
 
         KEYWORDS.put("void",              SliccTokenTypes.KW_VOID);
         KEYWORDS.put("if",               SliccTokenTypes.KW_IF);
@@ -44,13 +45,22 @@ public class SliccLexer extends LexerBase {
         KEYWORDS.put("dequeue",          SliccTokenTypes.KW_DEQUEUE);
         KEYWORDS.put("trigger",          SliccTokenTypes.KW_TRIGGER);
         KEYWORDS.put("stall_and_wait",   SliccTokenTypes.KW_STALL_AND_WAIT);
+        KEYWORDS.put("wakeup_port",      SliccTokenTypes.KW_WAKEUP_PORT);
         KEYWORDS.put("check_allocate",   SliccTokenTypes.KW_CHECK_ALLOCATE);
+        KEYWORDS.put("check_next_cycle", SliccTokenTypes.KW_CHECK_NEXT_CYCLE);
+        KEYWORDS.put("check_stop_slots", SliccTokenTypes.KW_CHECK_STOP_SLOTS);
+        KEYWORDS.put("check_on_cache_probe", SliccTokenTypes.KW_CHECK_ON_CACHE_PROBE);
+        KEYWORDS.put("OOD",              SliccTokenTypes.KW_OOD);
+        KEYWORDS.put("defer_enqueueing", SliccTokenTypes.KW_DEFER_ENQUEUEING);
         KEYWORDS.put("DPRINTF",          SliccTokenTypes.KW_DPRINTF);
         KEYWORDS.put("is_valid",         SliccTokenTypes.KW_IS_VALID);
         KEYWORDS.put("is_invalid",       SliccTokenTypes.KW_IS_INVALID);
         KEYWORDS.put("isReady",          SliccTokenTypes.KW_IS_READY);
 
         KEYWORDS.put("desc",            SliccTokenTypes.KW_DESC);
+        KEYWORDS.put("main",            SliccTokenTypes.KW_MAIN);
+        KEYWORDS.put("in_trans",        SliccTokenTypes.KW_IN_TRANS);
+        KEYWORDS.put("out_trans",       SliccTokenTypes.KW_OUT_TRANS);
         KEYWORDS.put("default",         SliccTokenTypes.KW_DEFAULT);
         KEYWORDS.put("network",         SliccTokenTypes.KW_NETWORK);
         KEYWORDS.put("virtual_network", SliccTokenTypes.KW_VIRTUAL_NETWORK);
