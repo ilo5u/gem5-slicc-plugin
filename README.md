@@ -7,6 +7,14 @@ Language support for `.sm` and `.slicc` files used in the
 
 Version **1.3.0** — **2026-10-21**. See [CHANGELOG.md](CHANGELOG.md) for the release notes.
 
+## How to Use
+
+1. **Install the plugin in CLion.** Follow the [installation instructions](#installing-in-clion--intellij-idea), then wait for project indexing to finish after opening a project.
+2. **Try the bundled gem5 Ruby sources.** This repository's [`ruby/`](ruby/) folder contains the main gem5 Ruby code, including SLICC protocols and related C++ implementations. Use **File → Open** in CLion to open that folder as a project. Open a protocol file such as [`MI_example-cache.sm`](ruby/protocol/MI_example-cache.sm) to try highlighting, completion, inlay hints, and `Ctrl+Click` / `Ctrl+B` navigation.
+3. **For gem5 development, open the full gem5 repository root.** Prefer opening the gem5 root as the CLion project rather than only `src/mem/ruby` or an individual protocol directory. This keeps C++ sources, `.sm` / `.slicc` files, and headers outside the Ruby subtree available together for indexing and cross-file navigation. The bundled `ruby/` folder is useful for a quick preview; resolving dependencies outside that copied subtree requires a full gem5 checkout.
+
+## Documentation
+
 Marketplace description, features, and 1.3.0 What's New are available in [MARKETPLACE.html](MARKETPLACE.html).
 The standalone Markdown description is available in [DESCRIPTION.md](DESCRIPTION.md).
 The HTML onboarding guide is available in [GET_STARTED.html](GET_STARTED.html).
