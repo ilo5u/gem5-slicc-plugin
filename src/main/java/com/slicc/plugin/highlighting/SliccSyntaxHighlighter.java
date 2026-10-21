@@ -175,6 +175,7 @@ public class SliccSyntaxHighlighter extends SyntaxHighlighterBase {
                 || type == SliccTokenTypes.KW_ACTION
                 || type == SliccTokenTypes.KW_TRANSITION
                 || type == SliccTokenTypes.KW_INCLUDE
+                || type == SliccTokenTypes.KW_GLOBAL
                 || type == SliccTokenTypes.KW_PROTOCOL) {
             return pack(DECL_KEYWORD);
         }
@@ -194,7 +195,13 @@ public class SliccSyntaxHighlighter extends SyntaxHighlighterBase {
                 || type == SliccTokenTypes.KW_DEQUEUE
                 || type == SliccTokenTypes.KW_TRIGGER
                 || type == SliccTokenTypes.KW_STALL_AND_WAIT
+                || type == SliccTokenTypes.KW_WAKEUP_PORT
                 || type == SliccTokenTypes.KW_CHECK_ALLOCATE
+                || type == SliccTokenTypes.KW_CHECK_NEXT_CYCLE
+                || type == SliccTokenTypes.KW_CHECK_STOP_SLOTS
+                || type == SliccTokenTypes.KW_CHECK_ON_CACHE_PROBE
+                || type == SliccTokenTypes.KW_OOD
+                || type == SliccTokenTypes.KW_DEFER_ENQUEUEING
                 || type == SliccTokenTypes.KW_DPRINTF
                 || type == SliccTokenTypes.KW_STATIC_CAST
                 || type == SliccTokenTypes.KW_NEW
@@ -205,6 +212,9 @@ public class SliccSyntaxHighlighter extends SyntaxHighlighterBase {
         }
         // Attribute keywords
         if (type == SliccTokenTypes.KW_DESC
+                || type == SliccTokenTypes.KW_MAIN
+                || type == SliccTokenTypes.KW_IN_TRANS
+                || type == SliccTokenTypes.KW_OUT_TRANS
                 || type == SliccTokenTypes.KW_DEFAULT
                 || type == SliccTokenTypes.KW_NETWORK
                 || type == SliccTokenTypes.KW_VIRTUAL_NETWORK

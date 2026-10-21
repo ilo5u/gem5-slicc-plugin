@@ -1,0 +1,5 @@
+void sendRequest(Addr destination, int requestCount);
+
+action(issueRequest, "i", desc="Issue requests") {
+    sendRequest(/*<# destination: #>*/0, /*<# requestCount: #>*/2);
+}

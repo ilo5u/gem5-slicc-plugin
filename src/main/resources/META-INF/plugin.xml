@@ -4,8 +4,99 @@
     <vendor email="slicc@gem5.org" url="https://www.gem5.org">gem5 Community</vendor>
 
     <description><![CDATA[
-        Language support for SLICC (.sm and .slicc files) used in gem5 Ruby memory subsystem.
+        <p>Language support for gem5 Ruby SLICC: highlighting, smart completion, cross-file navigation, and call-site discovery.</p>
+
+        <h2>Description</h2>
+        <p>Read, write, and explore gem5 Ruby cache-coherence protocols in CLion and IntelliJ IDEA. SLICC / gem5 Ruby Language Support brings syntax and semantic highlighting, context-aware completion, parameter information, and source navigation to <code>.sm</code> and <code>.slicc</code> files.</p>
+        <p>Follow transitions to their actions, navigate between function declarations and definitions, and jump back to the exact statements that call a function. Follow external SLICC type declarations to reachable C++ definitions. Include-aware lookup and machine, member, and lexical scopes help distinguish similarly named symbols across protocol files. Inside <code>peek</code> and <code>enqueue</code>, message-variable types drive relevant member suggestions.</p>
+        <p>Built for developers and researchers working on the gem5 Ruby memory subsystem. This plugin supports the <strong>SLICC protocol language</strong>, not the Ruby programming language.</p>
+
+        <h2>Features</h2>
+        <ul>
+          <li><strong>Syntax and semantic highlighting</strong> — Distinguish SLICC keywords, types, machines, actions, functions, enumeration members, and fields. Customise colours in the IDE's SLICC colour scheme.</li>
+          <li><strong>Complete reserved-word coverage</strong> — Highlight and complete all 30 gem5 SLICC reserved words, including <code>global</code>, <code>wakeup_port</code>, <code>check_next_cycle</code>, <code>check_stop_slots</code>, <code>check_on_cache_probe</code>, <code>defer_enqueueing</code>, and case-sensitive <code>OOD</code>. Recognise <code>in_trans</code>, <code>out_trans</code>, and <code>main</code> as attribute keywords alongside <code>interface</code> and <code>desc</code>.</li>
+          <li><strong>External SLICC types → C++ definitions</strong> — Navigate from <code>structure</code> names marked <code>external="yes"</code> and <code>external_type</code> declaration names to reachable gem5 C++ type definitions and supported aliases. Respect namespaces, <code>external_name</code>, and Ruby source-root boundaries; report missing definitions as errors and unavailable source context as warnings.</li>
+          <li><strong>Action ↔ transition navigation</strong> — Jump from a transition's action reference to its implementation. From an action declaration, jump to its referencing transition or choose among multiple transitions.</li>
+          <li><strong>Structure fields and enum constants → usages</strong> — Select a structure field or enumeration constant declaration to find its concrete usage statements, including reads, writes, initializers, and state/event references in transitions. Jump to the actual usage with file/line context, distinguishing receiver types, inherited members, local shadowing, and machine/include ownership.</li>
+          <li><strong>Function declaration → definition navigation</strong> — Resolve calls and separate declarations to matching SLICC definitions, with overload-aware lookup across machine/include and member scopes.</li>
+          <li><strong>Function → calling statements</strong> — From a function definition, or a declaration without a SLICC implementation, find concrete calling statements in functions and actions. This also works for declaration-only <code>structure</code> and <code>external_type</code> methods.</li>
+          <li><strong>Readable call-site previews</strong> — Show complete multiline statements on one line, with caller, file, and line context. Jump directly for a single statement or choose among multiple statements, then navigate to the actual call. Previews have a configurable length limit, defaulting to 160 characters.</li>
+          <li><strong>Include-aware function completion</strong> — Suggest free functions from machine includes, protocol files, and global declarations, with return types and parameter signatures. Prefix completion includes functions such as <code>tagLatency</code> and <code>dataLatency</code> when their declarations are visible.</li>
+          <li><strong>Type-aware member completion</strong> — After <code>.</code>, show fields and member functions of the resolved receiver type, including supported <code>interface</code> inheritance chains. Handle chained accesses and comments around member-access operators.</li>
+          <li><strong>Type-aware member error checking</strong> — Flag unknown field and method names after <code>.</code> when the receiver type and its visible SLICC <code>interface</code> hierarchy are unambiguous and complete, including external declarations. Respect lexical shadowing, message scopes, reference/pointer parameters, and machine/include ownership; suppress downstream errors after an unresolved chain element.</li>
+          <li><strong>Function-result type checking</strong> — Check function results assigned to declared variables or fields, including initializers, and results passed as function arguments. Infer simple variables, fields, nested free/member calls, and parentheses within visible SLICC scopes; report definite nominal-type mismatches and invalid use of <code>void</code> results.</li>
+          <li><strong>Scoped message variables</strong> — Suggest implicit <code>in_msg</code> only in <code>peek</code> bodies and <code>out_msg</code> only in <code>enqueue</code> bodies. Infer their types from the second statement argument, respecting nested bindings, and flag out-of-scope usage. Explicit function parameters named <code>in_msg</code> or <code>out_msg</code> take priority throughout the function, including nested message blocks, and use their declared types for resolution, completion, navigation, and highlighting.</li>
+          <li><strong>Function parameter information</strong> — View overload signatures and the active argument with <code>Ctrl+P</code>, or automatically when typing <code>(</code> after a function name.</li>
+          <li><strong>Reference parameters</strong> — Recognise parameters such as <code>CHIRequestMsg &amp; out_msg</code> and <code>WriteMask &amp;mask</code> as single declarations. Preserve reference and pointer modifiers in displayed signatures and declaration/definition matching; use underlying SLICC types for member lookup and supported call-result compatibility.</li>
+          <li><strong>Parameter name inlay hints</strong> — Show parameter names before arguments of resolved free-function and member-function calls. Display hints for ambiguous overloads only where candidate names agree; omit unnamed parameters and arguments already named like their parameter.</li>
+          <li><strong>Implicit type inlay hints</strong> — Show the inferred type at the first actual use of each scoped <code>in_msg</code>, <code>out_msg</code>, <code>tbe</code>, <code>cache_entry</code>, or <code>address</code> binding, without repeating explicit visible variable declarations, including function parameters named <code>in_msg</code> or <code>out_msg</code>. Respect <code>peek</code> / <code>enqueue</code> message types and action scopes. Toggle parameter-name and type hints independently under Settings → Editor → Inlay Hints → SLICC; calculation waits until indexing finishes.</li>
+          <li><strong>Scope-aware references and Find Usages</strong> — Respect preceding local declarations, block visibility, and parameter/local shadowing. Distinguish resolved overloads and same-named symbols owned by different machines or types.</li>
+          <li><strong>Protocol and global symbol lookup</strong> — Follow protocol/include relationships and declarations exposed through <code>RubySlicc_interfaces.slicc</code> to navigate across source files.</li>
+          <li><strong>Everyday editing tools</strong> — Search symbols by name, browse the Structure View, fold declaration bodies, match braces, toggle comments, and highlight unresolved ordinary identifiers.</li>
+        </ul>
+
+        <h2>Current Limitations</h2>
+        <p>Rename refactoring, automatic code formatting, and live templates are not implemented. Member diagnostics check names exposed by SLICC declarations, not undeclared C++ members. Unknown receiver types, incomplete or cyclic interfaces, ambiguous types, malformed declarations, and indexing defer this name-only check; call-result, parenthesized, and indexed receivers are not inferred for member-name errors. Separate function-result checks use supported SLICC nominal types, not complete C++ conversions, validation of every raw argument, or function-body return-statement checking; unknown expressions, ambiguous type declarations, conflicting overloads, complex operators, and indexing defer these diagnostics. Inlay type hints cover implicit SLICC variables, not arbitrary C++ expressions. The plugin provides editor support; it does not replace the gem5 SLICC compiler or run simulations.</p>
+        <p>External-type lookup follows supported literal <code>Source</code> / <code>MakeInclude</code> / include paths, considering conditional branches together without executing Kconfig, SCons, or a C++ preprocessor. Computed paths and macro-generated definitions may not resolve. C++ member/call navigation is not included.</p>
     ]]></description>
+
+    <change-notes><![CDATA[
+        <h2>What's New in 1.3.0</h2>
+        <p>Release date: <strong>2026-10-21</strong>.</p>
+
+        <h3>Type Checking and Inlay Hints</h3>
+        <ul>
+          <li><strong>Function-result type errors.</strong> Check function results in assignments, variable initializers, and arguments to other calls against visible SLICC target types. Support simple variables, fields, nested free/member calls, and parentheses; select overloads from arguments rather than the desired return type. Report definite mismatches and invalid use of <code>void</code> results, while deferring unknown expressions, ambiguous type declarations, conflicting overloads, incomplete/complex expressions, and indexing. This is limited SLICC nominal-type validation, not full C++ conversions, every raw argument, or function-body return checking.</li>
+          <li><strong>Type-aware member errors.</strong> Report unknown field and method names after <code>.</code> against the uniquely resolved receiver's visible SLICC declaration and complete <code>interface</code> hierarchy, including external declarations. Respect scopes, shadowing, message types, and reference/pointer parameters. Skip unknown or incomplete receiver information and unsupported expressions; avoid cascading errors along unresolved chains. This checks member names, not full C++ types or argument compatibility.</li>
+          <li><strong>Parameter name inlay hints.</strong> Show parameter names before arguments of resolved free-function and member-function calls, respecting overloads and machine/include/type scopes. For ambiguous overloads, show only agreed names; omit unnamed parameters and arguments already named like their parameter.</li>
+          <li><strong>Scoped implicit type inlay hints.</strong> Show the type at the first actual use of each <code>in_msg</code>, <code>out_msg</code>, <code>tbe</code>, <code>cache_entry</code>, or <code>address</code> binding. Preserve nearest <code>peek</code> / <code>enqueue</code> message types and action scopes, and avoid repeating types for explicit visible variables. Toggle parameter-name and type hints separately under <strong>Settings → Editor → Inlay Hints → SLICC</strong>; calculation waits until indexing finishes.</li>
+        </ul>
+
+        <h3>New Navigation</h3>
+        <ul>
+          <li><strong>Follow external SLICC types into C++ definitions.</strong> Use Go to Declaration on a <code>structure</code> name marked <code>external="yes"</code> or an <code>external_type</code> declaration name to open reachable C++ type definitions and supported aliases. Respect <code>external_name</code>, namespaces, and Ruby source-root boundaries. Missing definitions are errors; unavailable source context produces warnings. Lookup follows supported literal <code>Source</code> / <code>MakeInclude</code> / include paths without executing the build.</li>
+          <li><strong>Navigate from structure fields and enum constants to usage statements.</strong> Click a declaration name to jump to its single usage or choose among multiple statements. Include reads, writes, initializers, and transition state/event references; retain type, inheritance, shadowing, and machine/include scope checks. Usage previews share the configurable length limit and jump to the actual identifier location.</li>
+          <li><strong>Navigate from actions back to transitions.</strong> Use Go to Declaration on an action's name to jump to the transition that uses it, or select from a list showing transition headers and files.</li>
+          <li><strong>Connect function declarations, definitions, and calls.</strong> Calls and separate declarations now navigate to matching definitions across included files, respecting overload signatures and machine/member ownership.</li>
+          <li><strong>Jump from functions to exact calling statements.</strong> On a definition name, discover calls inside functions and actions. Declaration-only methods in <code>structure</code> and <code>external_type</code> support the same reverse navigation when no SLICC definition exists.</li>
+          <li><strong>Preview statements instead of caller declarations.</strong> Multiline statements appear on one line with file and line information. Different statements in the same caller remain separate; multiple calls within one statement share one candidate. Selecting a candidate opens the actual call location. Preview text defaults to 160 characters and can be adjusted with the IDE VM option <code>-Dslicc.navigation.maxStatementLength=240</code>.</li>
+        </ul>
+
+        <h3>Smarter Completion and Scopes</h3>
+        <ul>
+          <li><strong>Complete functions from includes.</strong> Free-function suggestions now include visible machine, protocol, and global declarations, with return types, parameter signatures, and overloads. Included functions such as <code>tagLatency</code> and <code>dataLatency</code> can be found by their prefixes.</li>
+          <li><strong>Respect explicit and implicit message bindings.</strong> Without a same-named function parameter, <code>in_msg</code> is available inside <code>peek</code> and <code>out_msg</code> inside <code>enqueue</code>, taking their types from the second statement argument. Nested bindings are respected and out-of-scope uses are flagged. Explicit function parameters named <code>in_msg</code> or <code>out_msg</code> override implicit bindings throughout the function, including nested message blocks, using their declared types for completion, navigation, references, and highlighting without redundant implicit-type hints.</li>
+          <li><strong>Reference parameter parsing.</strong> Keep <code>CHIRequestMsg &amp; out_msg</code> and <code>WriteMask &amp;mask</code> intact as parameters. Preserve <code>&amp;</code> / <code>*</code> modifiers in signatures and declaration/definition matching; use underlying SLICC types for member lookup and supported call-result compatibility.</li>
+          <li><strong>More accurate variable and reference resolution.</strong> Locals no longer leak between actions or outside blocks, preceding declarations and shadowing take priority, and Find Usages distinguishes resolved declarations instead of matching names alone.</li>
+        </ul>
+
+        <h3>Fixes and Compatibility</h3>
+        <ul>
+          <li>Expanded reserved-word highlighting, parsing, and completion to cover the gem5 SLICC keyword list, and added <code>in_trans</code> / <code>out_trans</code> / <code>main</code> attribute keywords alongside <code>interface</code> and <code>desc</code>.</li>
+          <li>Reduced repeated project and PSI scans during file analysis with shared protocol/include graphs, per-file symbol indexes, and annotation-session C++ lookup reuse. External-type diagnostics no longer load C++ PSI/navigation pointers; indexing and source edits still invalidate the appropriate caches.</li>
+          <li>Corrected zero-argument function-call handling and preserved primitive, scoped, and pointer parameter types when matching function signatures.</li>
+          <li>Improved member completion and navigation when comments or whitespace surround <code>.</code>, including chained accesses.</li>
+          <li>Preserved complete built-in statements such as <code>DPRINTF</code>, <code>trigger</code>, and <code>set_tbe</code> when presenting nested function calls.</li>
+          <li>Reworked Structure View using public platform interfaces, addressing the unavailable implementation base class in the 2026.2 platform.</li>
+        </ul>
+
+        <h2>v1.1.0</h2>
+        <ul>
+          <li><b>Dot-triggered member completion</b> — typing <code>.</code> after a variable shows only the
+              fields and member functions of that variable's type. Works for <code>tbe.</code>, <code>in_msg.</code>,
+              <code>out_msg.</code>, and any declared variable; follows <code>interface</code> inheritance chains.</li>
+          <li><b>Parameter info popup</b> — typing <code>(</code> after a function name automatically shows all
+              overloads with parameter types. Current argument position is highlighted. Also available via <b>Ctrl+P</b>.</li>
+          <li><b>Unresolved identifier errors</b> — identifiers that cannot be resolved to any declaration are
+              underlined in red.</li>
+        </ul>
+
+        <h2>v1.0.1</h2>
+        <ul>
+          <li>Fix navigation for types</li>
+          <li>Add navigation for symbols</li>
+        </ul>
+    ]]></change-notes>
 
     <depends>com.intellij.modules.platform</depends>
     <idea-version since-build="261"/>
@@ -37,6 +128,24 @@
 
         <codeInsight.parameterInfo language="SLICC"
                                    implementationClass="com.slicc.plugin.completion.SliccParameterInfoHandler"/>
+
+        <codeInsight.declarativeInlayProvider language="SLICC"
+                                             providerId="slicc.parameter.names"
+                                             implementationClass="com.slicc.plugin.inlay.SliccParameterHintsProvider"
+                                             isEnabledByDefault="true"
+                                             group="PARAMETERS_GROUP"
+                                             bundle="messages.SliccBundle"
+                                             nameKey="inlay.parameters.name"
+                                             descriptionKey="inlay.parameters.description"/>
+
+        <codeInsight.declarativeInlayProvider language="SLICC"
+                                             providerId="slicc.implicit.types"
+                                             implementationClass="com.slicc.plugin.inlay.SliccTypeHintsProvider"
+                                             isEnabledByDefault="true"
+                                             group="TYPES_GROUP"
+                                             bundle="messages.SliccBundle"
+                                             nameKey="inlay.types.name"
+                                             descriptionKey="inlay.types.description"/>
 
         <typedHandler implementationClass="com.slicc.plugin.completion.SliccTypedHandler"
                       id="SliccTypedHandler"/>
