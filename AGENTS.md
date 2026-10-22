@@ -44,6 +44,10 @@ New there. Keep `DESCRIPTION.md`, the standalone Markdown version of the product
 description, aligned with the same content. `GET_STARTED.html` is the separate
 Marketplace onboarding guide.
 
+`README.md` is the English guide and `README.zh-CN.md` is its Simplified Chinese
+counterpart. Keep their sections, features, limitations, commands, versions, and
+links aligned when updating either guide, including the companion VS Code link.
+
 ## Architecture
 
 This is an IntelliJ Platform plugin providing language support for the gem5 Ruby **SLICC** language (`.sm` / `.slicc` files).

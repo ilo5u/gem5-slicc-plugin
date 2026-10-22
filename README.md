@@ -1,5 +1,7 @@
 # SLICC / gem5 Ruby Language Plugin for CLion / IntelliJ IDEA
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 Language support for `.sm` and `.slicc` files used in the
@@ -13,6 +15,13 @@ Version **1.5.0** — **2026-10-22**. See [CHANGELOG.md](CHANGELOG.md) for the r
 2. **Try the bundled gem5 Ruby sources.** This repository's [`ruby/`](ruby/) folder contains the main gem5 Ruby code, including SLICC protocols and related C++ implementations. Use **File → Open** in CLion to open that folder as a project. Open a protocol file such as [`MI_example-cache.sm`](ruby/protocol/MI_example-cache.sm) to try highlighting, completion, inlay hints, and `Ctrl+Click` / `Ctrl+B` navigation.
 3. **For gem5 development, open the full gem5 repository root.** Prefer opening the gem5 root as the CLion project rather than only `src/mem/ruby` or an individual protocol directory. This keeps C++ sources, `.sm` / `.slicc` files, and headers outside the Ruby subtree available together for indexing and cross-file navigation. The bundled `ruby/` folder is useful for a quick preview; resolving dependencies outside that copied subtree requires a full gem5 checkout.
 4. **Explore descriptions and diagnostics.** Hover a declaration or resolved usage, or press `Ctrl+Q`, to read its `desc`. In actions, try `DPRINTF(` for project-wide debug-flag completion; literal format argument-count mismatches produce warnings, while definite flag, transition, and function-name problems remain errors.
+
+### Prefer VS Code?
+
+If you prefer developing gem5 SLICC protocols in **Visual Studio Code**, use the
+companion [gem5-slicc-plugin-for-vscode](https://github.com/ilo5u/gem5-slicc-plugin-for-vscode)
+extension. This repository contains the CLion / IntelliJ IDEA plugin; see the
+VS Code repository for its own installation and usage instructions.
 
 ## Documentation
 
