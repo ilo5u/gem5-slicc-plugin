@@ -7,6 +7,7 @@ import com.intellij.openapi.util.Key;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiManager;
+import com.intellij.psi.util.PsiTreeUtil;
 import com.slicc.plugin.lexer.SliccTokenTypes;
 import com.slicc.plugin.psi.*;
 import org.jetbrains.annotations.NotNull;
@@ -19,7 +20,8 @@ public final class SliccExternalTypeNavigation {
 
     public record Result(List<SliccCppTypeTarget> targets, @Nullable String error, boolean unavailable) {}
     public record Diagnostic(@Nullable String error, boolean unavailable) {}
-    private record Context(@Nullable SliccRubyBuildScope.Snapshot scope, @Nullable String failure, boolean indexing) {}
+    private record Context(@Nullable SliccRubyBuildScope.Snapshot scope, @Nullable SliccRubyProtocols.Snapshot protocols,
+                           @Nullable String failure, boolean indexing) {}
     private record Lookup(List<String> names, @Nullable SliccRubyBuildScope.Snapshot scope,
                           @Nullable String error, boolean unavailable) {}
     private static final Key<Context> ANNOTATION_CONTEXT = Key.create("SLICC_EXTERNAL_TYPE_ANNOTATION_CONTEXT");
@@ -38,25 +40,25 @@ public final class SliccExternalTypeNavigation {
         Lookup lookup = lookup(declaration, null);
         if (lookup.scope() == null) return new Result(List.of(), lookup.error(), lookup.unavailable());
         PsiManager manager = declaration.getManager();
-        for (String qualified : lookup.names()) {
+        for (List<SliccRubyBuildScope.Location> locations : candidates(lookup)) {
             List<SliccCppTypeTarget> targets = new ArrayList<>();
-            for (SliccRubyBuildScope.Location location : lookup.scope().definitions().getOrDefault(qualified, List.of())) {
+            for (SliccRubyBuildScope.Location location : locations) {
                 PsiFile file = manager.findFile(location.file());
                 if (file != null) targets.add(new SliccCppTypeTarget(file, location.definition()));
             }
             if (!targets.isEmpty()) return new Result(targets, null, false);
         }
-        return new Result(List.of(), missingMessage(declaration, lookup.names()), false);
+        return new Result(List.of(), lookup.error() == null ? missingMessage(declaration, lookup.names()) : lookup.error(), lookup.unavailable());
     }
 
     @NotNull
     public static Diagnostic diagnostic(SliccNamedElement declaration, @Nullable AnnotationSession session) {
         Lookup lookup = lookup(declaration, session);
         if (lookup.scope() == null) return new Diagnostic(lookup.error(), lookup.unavailable());
-        for (String qualified : lookup.names()) {
-            if (!lookup.scope().definitions().getOrDefault(qualified, List.of()).isEmpty()) return new Diagnostic(null, false);
+        for (List<SliccRubyBuildScope.Location> locations : candidates(lookup)) {
+            if (!locations.isEmpty()) return new Diagnostic(null, false);
         }
-        return new Diagnostic(missingMessage(declaration, lookup.names()), false);
+        return new Diagnostic(lookup.error() == null ? missingMessage(declaration, lookup.names()) : lookup.error(), lookup.unavailable());
     }
 
     private static Lookup lookup(SliccNamedElement declaration, @Nullable AnnotationSession session) {
@@ -82,21 +84,48 @@ public final class SliccExternalTypeNavigation {
         if (context.scope() == null) return new Lookup(List.of(), null, "Cannot locate the Ruby Kconfig/SConscript source tree for external type '"
                 + declaration.getName() + "'. Open the Ruby or gem5 source directory as a project.", true);
         List<String> names;
+        boolean unknownProtocol = false;
         if (name.startsWith("::")) names = List.of(name.substring(2));
         else if (name.startsWith("gem5::")) names = List.of(name);
-        else names = declaration instanceof SliccExternalTypeDecl
-                    ? List.of("gem5::ruby::" + name, "gem5::" + name)
-                    : List.of("gem5::ruby::" + name);
-        return new Lookup(names, context.scope(), null, false);
+        else if (name.contains("::")) names = declaration instanceof SliccExternalTypeDecl
+                ? List.of("gem5::ruby::" + name, "gem5::" + name) : List.of("gem5::ruby::" + name);
+        else {
+            names = new ArrayList<>();
+            VirtualFile source = declaration.getContainingFile().getOriginalFile().getVirtualFile();
+            Set<String> protocols = context.protocols().protocolsByFile().getOrDefault(source, Set.of());
+            String protocol = protocols.size() == 1 ? protocols.iterator().next() : null;
+            String qualified = protocol == null || protocol.isEmpty() ? null : "gem5::ruby::" + protocol + "::" + name;
+            boolean machine = PsiTreeUtil.getParentOfType(declaration, SliccMachineDecl.class) != null
+                    || context.protocols().machineFiles().contains(source);
+            unknownProtocol = machine && qualified == null;
+            if (machine && qualified != null) names.add(qualified);
+            names.add("gem5::ruby::" + name);
+            if (!machine && qualified != null) names.add(qualified);
+            if (declaration instanceof SliccExternalTypeDecl) names.add("gem5::" + name);
+        }
+        return new Lookup(names, context.scope(), unknownProtocol
+                ? "Cannot determine a unique Kconfig protocol namespace for external type '" + declaration.getName()
+                + "'. Check protocol declarations and includes; no matching base gem5::ruby definition was found." : null, unknownProtocol);
+    }
+
+    private static List<List<SliccRubyBuildScope.Location>> candidates(Lookup lookup) {
+        if (lookup.scope() == null) return List.of();
+        List<List<SliccRubyBuildScope.Location>> candidates = new ArrayList<>();
+        for (String name : lookup.names()) {
+            candidates.add(lookup.scope().definitions().getOrDefault(name, List.of()));
+        }
+        return candidates;
     }
 
     private static Context context(PsiFile file) {
-        if (DumbService.isDumb(file.getProject())) return new Context(null, null, true);
+        if (DumbService.isDumb(file.getProject())) return new Context(null, null, null, true);
         try {
             VirtualFile root = SliccRubyBuildScope.rootFor(file);
-            return new Context(root == null ? null : SliccRubyBuildScope.snapshot(root, file.getProject()), null, false);
+            return root == null ? new Context(null, null, null, false)
+                    : new Context(SliccRubyBuildScope.snapshot(root, file.getProject()),
+                    SliccRubyProtocols.snapshot(root, file.getProject()), null, false);
         } catch (UncheckedIOException exception) {
-            return new Context(null, exception.getMessage(), false);
+            return new Context(null, null, exception.getMessage(), false);
         }
     }
 

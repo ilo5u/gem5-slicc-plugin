@@ -20,6 +20,8 @@ import com.slicc.plugin.navigation.SliccPrintfDiagnostics;
 import com.slicc.plugin.navigation.SliccTransitionDiagnostics;
 import com.slicc.plugin.navigation.SliccActionNavigation;
 import com.slicc.plugin.navigation.SliccCallDiagnostics;
+import com.slicc.plugin.navigation.SliccEnumDefaults;
+import com.slicc.plugin.navigation.SliccGeneratedFunctions;
 import com.slicc.plugin.psi.*;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -55,7 +57,7 @@ public class SliccAnnotator implements Annotator {
 
         if (element instanceof SliccFieldDecl || element.getNode().getElementType() == SliccTypes.STATEMENT) {
             for (SliccPrintfDiagnostics.Diagnostic diagnostic : SliccPrintfDiagnostics.checkContainer(element)) {
-                holder.newAnnotation(HighlightSeverity.ERROR, diagnostic.message()).range(diagnostic.range()).create();
+                holder.newAnnotation(diagnostic.severity(), diagnostic.message()).range(diagnostic.range()).create();
             }
             for (SliccTypeDiagnostics.Diagnostic diagnostic : SliccTypeDiagnostics.check(
                     element, holder.getCurrentAnnotationSession())) {
@@ -124,9 +126,25 @@ public class SliccAnnotator implements Annotator {
                 return;
             }
 
+            SliccEnumDefaults.Resolution enumDefault = SliccEnumDefaults.resolve(element);
+            if (enumDefault.handled()) {
+                if (enumDefault.member() != null) {
+                    highlight(element, SliccSyntaxHighlighter.ENUM_MEMBER_VALUE, holder);
+                } else if (!enumDefault.deferred()) {
+                    holder.newAnnotation(HighlightSeverity.ERROR, "Unresolved symbol '" + text + "'")
+                            .range(element).create();
+                }
+                return;
+            }
+
             String missingCall = SliccCallDiagnostics.error(element);
             if (missingCall != null) {
                 holder.newAnnotation(HighlightSeverity.ERROR, missingCall).range(element).create();
+                return;
+            }
+
+            if (SliccGeneratedFunctions.resolve(element) != null) {
+                highlight(element, SliccSyntaxHighlighter.FUNCTION_CALL, holder);
                 return;
             }
 

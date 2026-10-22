@@ -34,7 +34,8 @@ public final class SliccMemberNavigation {
         for (PsiFile file : files) {
             for (PsiElement reference : PsiTreeUtil.collectElements(file,
                     element -> element.getNode().getElementType() == SliccTokenTypes.IDENTIFIER
-                            && name.equals(element.getText()))) {
+                            && (name.equals(element.getText()) || declaration instanceof SliccEnumMember member
+                            && SliccEnumDefaults.isAlias(element, member)))) {
                 ProgressManager.checkCanceled();
                 if (isDeclarationName(reference)) continue;
                 PsiElement resolved = SliccGotoDeclarationHandler.resolveReference(reference);

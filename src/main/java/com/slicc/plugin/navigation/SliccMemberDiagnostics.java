@@ -108,7 +108,7 @@ public final class SliccMemberDiagnostics {
                     && PsiTreeUtil.getParentOfType(position, SliccActionDecl.class) != null) {
                 return SliccGotoDeclarationHandler.resolveOwnerTypeForCompletion(receiver, position);
             }
-            return null;
+            return SliccPorts.resolve(name, position).type();
         }
 
         private Members members(String type) {

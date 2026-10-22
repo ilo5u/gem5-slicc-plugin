@@ -1,7 +1,8 @@
 # Ruby SLICC and C++ Integration
 
-This document describes the source layout inspected for the 1.3.0 external-type
-navigation feature. Paths beginning with `ruby/` refer to the Ruby source tree
+This document describes the source layout first inspected for the 1.3.0
+external-type navigation feature and its protocol-scoped lookup rules in 1.5.0.
+Paths beginning with `ruby/` refer to the Ruby source tree
 included in this repository. In a complete gem5 checkout, this tree normally lives
 under `src/mem/ruby/`.
 
@@ -83,23 +84,46 @@ attribute is `"yes"`, and to `external_type` declarations. Ordinary SLICC
 structures remain SLICC declarations and are not required to have handwritten C++
 definitions.
 
-For example, these names in `RubySlicc_Types.sm` map to the actual C++ class
+For example, these shared and protocol-specific declarations map to actual C++ class
 definitions, rather than to constructors or to forward declarations:
 
 | SLICC declaration | C++ target |
 | --- | --- |
 | `structure(MessageBuffer, external="yes", ...)` | `gem5::ruby::MessageBuffer` in `ruby/network/MessageBuffer.hh` |
 | `structure(CacheMemory, external="yes")` | `gem5::ruby::CacheMemory` in `ruby/structures/CacheMemory.hh` |
+| `structure(MN_TBEStorage, external="yes")` | `gem5::ruby::CHI::MN_TBEStorage` in `ruby/structures/MN_TBEStorage.hh` |
 | `external_type(NodeID, ...)` | `gem5::ruby::NodeID` typedef in `ruby/common/TypeDefines.hh` |
 
 The mapping rules are:
 
 - An `external_name` attribute overrides the SLICC name used for C++ lookup.
-- An unqualified external structure name is looked up in `gem5::ruby`.
-- An `external_type` name first uses `gem5::ruby`, with `gem5` as a fallback for
-  common gem5 types such as `Addr`, `Tick`, and `Cycles`.
+- An unqualified external type declared in a machine or its machine-owned literal include
+  closure first uses `gem5::ruby::<protocol>::Name`, then `gem5::ruby::Name`.
+  CHI's `MN_TBEStorage` therefore resolves to `gem5::ruby::CHI::MN_TBEStorage`,
+  even if a shared or another protocol's same-named type exists. Only reachable
+  sources participate; other protocol namespaces are never searched.
+- Outside machine ownership, try `gem5::ruby::Name` before the uniquely known
+  protocol candidate. An `external_type` retains the final exact `gem5::Name`
+  fallback for common types such as `Addr`, `Tick`, and `Cycles`.
+- Only includes written inside a machine propagate its ownership. A global
+  declaration or an include outside that machine remains shared-Ruby-first even
+  when the same source file also contains a machine.
+- Protocol namespaces come from case-preserving `RUBY_PROTOCOL_<name>` Kconfig
+  suffixes. A literal `bool` prompt is an alias with whitespace normalised to
+  underscores, not a replacement namespace. Match the `.slicc` `protocol` literal
+  to those names and propagate ownership through its transitive literal includes.
+  Unknown or conflicting metadata leaves only the shared Ruby candidate (and the
+  `external_type` gem5 fallback), rather than guessing a protocol. This lightweight
+  protocol graph is cached separately from C++ source scanning and reuses per-file
+  source tokens. If machine ownership is unknown or conflicting and shared lookup
+  also misses, report an unavailable-context warning rather than a definite
+  missing-definition error.
 - A name beginning with `gem5::` uses that qualified name directly. A leading
-  `::` requests an exact global qualified name.
+  `::` requests an exact global qualified name. Other explicitly qualified names
+  remain exact relative candidates; none are broadened to other namespaces.
+- Multiple definitions of the same exact qualified candidate are offered for
+  selection. Unqualified lookup never searches arbitrary descendant namespaces,
+  nested-class-only names, anonymous namespaces, or `gem5::rubyLike`.
 - Template arguments are removed when locating the underlying type definition.
 - Supported `typedef` and `using Name = ...` aliases are valid navigation
   targets. Navigation stops at the alias declaration; it does not promise to
@@ -163,6 +187,9 @@ Source and document changes invalidate the cached lookup data. Each annotation
 session shares one source context across its external declarations. Diagnostics
 inspect source locations without loading C++ PSI or creating navigation pointers;
 those targets are created only for an explicit navigation request.
+Protocol token caches live in project-owned storage keyed by source file, not in
+VFS user data; this preserves their project lifetime and avoids the IDE's VFS
+cache leak guard, which would otherwise interrupt external-type navigation.
 
 ## Implementation Entry Points
 

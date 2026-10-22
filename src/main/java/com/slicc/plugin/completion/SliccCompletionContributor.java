@@ -15,6 +15,7 @@ import com.slicc.plugin.navigation.SliccMessageScope;
 import com.slicc.plugin.navigation.SliccFileSymbols;
 import com.slicc.plugin.navigation.SliccDebugFlags;
 import com.slicc.plugin.navigation.SliccPrintfDiagnostics;
+import com.slicc.plugin.navigation.SliccPorts;
 import com.slicc.plugin.psi.*;
 import org.jetbrains.annotations.NotNull;
 
@@ -68,11 +69,12 @@ public class SliccCompletionContributor extends CompletionContributor {
         // Resolve the owner's type — pass originalFile so resolveVarType uses the real file
         PsiFile originalFile = parameters.getOriginalFile();
         String ownerType = SliccGotoDeclarationHandler.resolveOwnerTypeForCompletion(ownerNode, position, originalFile);
-        if (ownerType == null) return SliccMessageScope.isMessageVariable(ownerNode.getText());
+        if (ownerType == null) return SliccMessageScope.isMessageVariable(ownerNode.getText())
+                || SliccPorts.resolve(ownerNode.getText(), position, originalFile).knownName();
 
         // Collect and emit member completions
-        PsiFile file = originalFile;
-        for (SliccNamedElement member : SliccGotoDeclarationHandler.collectMembersOfType(ownerType, file)) {
+        PsiElement context = parameters.getOriginalPosition() != null ? parameters.getOriginalPosition() : position;
+        for (SliccNamedElement member : SliccGotoDeclarationHandler.collectMembersOfTypeInContext(ownerType, context)) {
             String name = member.getName();
             if (name == null) continue;
             if (member instanceof SliccFieldDecl field) {
@@ -106,10 +108,12 @@ public class SliccCompletionContributor extends CompletionContributor {
     private static void addScopeVariableCompletions(@NotNull PsiElement position,
                                                       @NotNull PsiFile originalFile,
                                                       @NotNull CompletionResultSet result) {
+        Set<String> names = new HashSet<>();
         for (SliccFieldDecl field : SliccGotoDeclarationHandler.collectVisibleVariables(position, originalFile)) {
             String name = field.getName();
             if (name == null || SliccMessageScope.isMessageVariable(name)
                     && SliccMessageScope.findParameter(name, position) == null) continue;
+            names.add(name);
             com.intellij.lang.ASTNode tr = field.getNode().findChildByType(SliccTypes.TYPE_REF);
             String typeName = "";
             if (tr != null) typeName = SliccPsiUtil.typeText(tr);
@@ -118,6 +122,12 @@ public class SliccCompletionContributor extends CompletionContributor {
                     .withTypeText(typeName)
                     .withBoldness(true)
                     .withPsiElement(field));
+        }
+        for (SliccNamedElement port : SliccPorts.visible(position, originalFile)) {
+            String name = port.getName();
+            if (name == null || !names.add(name)) continue;
+            result.addElement(LookupElementBuilder.create(name).withIcon(SliccIcons.FUNCTION)
+                    .withTypeText(SliccPorts.typeOf(port)).withPsiElement(port));
         }
     }
 
@@ -164,7 +174,7 @@ public class SliccCompletionContributor extends CompletionContributor {
     );
 
     private static final List<String> BUILTIN_STMTS = List.of(
-            "peek", "enqueue", "dequeue", "trigger", "stall_and_wait",
+            "peek", "enqueue", "trigger", "stall_and_wait",
             "check_allocate", "error", "assert",
             "wakeup_port", "check_next_cycle", "check_stop_slots", "check_on_cache_probe",
             "defer_enqueueing", "static_cast", "is_valid", "is_invalid", "new", "OOD",
@@ -173,6 +183,8 @@ public class SliccCompletionContributor extends CompletionContributor {
 
     private static final List<String> ATTR_KEYWORDS = List.of(
             "desc", "main", "block_on", "format", "in_trans", "out_trans", "default", "network", "virtual_network",
+            "wake_up", "rsc_stall_handler", "prot_stall_handler",
+            "return_by_pointer", "return_by_ref",
             "vnet_type", "rank", "interface", "external", "primitive", "ordered"
     );
 

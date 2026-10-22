@@ -12,7 +12,7 @@ This file provides guidance to coding agents working in this repository. It appl
 ```bash
 # Build the plugin zip
 ./gradlew buildPlugin
-# Output: build/distributions/slicc-plugin-1.4.0.zip
+# Output: build/distributions/slicc-plugin-1.5.0.zip
 # The version is defined in build.gradle.kts.
 
 # Launch sandboxed IDE with plugin loaded (primary way to test)
@@ -25,17 +25,19 @@ There is no automated test suite (`src/test/` is absent). Test manually using re
 
 ## Release Tracking
 
-The current release version is **1.4.0**, prepared on **2026-10-21**. This release
-integrates corrected implicit action-variable navigation and the distinct
-light/dark file and symbol icons previously included in the 1.3.0 same-version
-refresh. Implicit `cache_entry` selects the visible primary `AbstractCacheEntry`
-implementation, respecting `main` and explicit variable shadowing. Its changes
-are recorded in the dated section of `CHANGELOG.md`; preserve the existing 1.3.0
-history. Record subsequent changes in a new unreleased section unless the user
-explicitly authorizes another same-version refresh. Keep the
+The current release version is **1.5.0**, prepared on **2026-10-22**. This release
+combines legal transition-list and wildcard handling, recovery after malformed
+action blocks, correct transition resource/action separation, protocol-scoped
+external C++ navigation, additional port/qualifier attributes and `stallPort`,
+project-wide debug flags, enumeration-default navigation, generated enum/state
+helper resolution, and declaration-driven `InPort` / `OutPort` methods. Its
+changes and validation are recorded in the
+dated section of `CHANGELOG.md`; preserve the existing 1.4.0 and earlier history.
+Record subsequent changes in a new unreleased section unless the user explicitly
+authorizes another same-version refresh. Keep the
 user-facing notes in `MARKETPLACE.html` synchronized with
 the `<change-notes>` section of `src/main/resources/META-INF/plugin.xml`, preserving
-previous release entries. The 1.4.0 user-facing release notes are synchronized.
+previous release entries. The 1.5.0 user-facing release notes are synchronized.
 Keep the Marketplace short-description paragraph and Description/Features/Current
 Limitations sections synchronized with `<description>` too; do not include What's
 New there. Keep `DESCRIPTION.md`, the standalone Markdown version of the product
@@ -55,9 +57,10 @@ Source file → Lexer → Parser → PSI Tree → Annotator / Reference / Comple
 ```
 
 1. **Lexer** (`lexer/SliccLexer.java`) — Hand-written lexer; tokenizes 40+ keywords, C++-style comments, `:=` assignments, and SLICC-specific keywords (`machine`, `action`, `transition`, `peek`, `enqueue`, …).
-   - `SliccBuiltinFunctions` — Shares distinct tokens and names for `DPRINTF`, `DPRINTFN`, and `APPEND_TRANSITION_COMMENT` across parsing, highlighting, completion, and call checks. These built-ins and attribute keywords such as `block_on` / `format` do not change the 30-word gem5 reserved list.
+   - `SliccBuiltinFunctions` — Shares distinct tokens and names for `DPRINTF`, `DPRINTFN`, `APPEND_TRANSITION_COMMENT`, and `stallPort` across parsing, highlighting, completion, and call checks. `stallPort` has a `void` result. These built-ins and attribute keywords such as `block_on` / `format` / `wake_up`, the port attributes `rsc_stall_handler` / `prot_stall_handler`, and `return_by_ref` / `return_by_pointer` do not change the 30-word gem5 reserved list.
+   - `isReady` and `dequeue` are ordinary identifiers, not special keyword tokens or default built-in functions. Resolve their declarations and usages through the normal function/member pipeline; do not restore unconditional completion, highlighting, or parser exemptions for these names.
 
-2. **Parser** (`parser/SliccParser.java`) — Recursive-descent parser that builds the PSI tree. Top-level grammar handles: `machine`, `structure`, `enumeration`, `state_declaration`, `external_type`, `include`, and function declarations.
+2. **Parser** (`parser/SliccParser.java`) — Recursive-descent parser that builds the PSI tree. Top-level grammar handles: `machine`, `structure`, `enumeration`, `state_declaration`, `external_type`, `include`, and function declarations. Stop statement/expression recovery at a new declaration boundary when a prior action block is unterminated, preserving the syntax error without swallowing later actions or transitions. A second brace block distinguishes optional transition resources from actions; a single empty or semicolon-free block remains `TRANSITION_ACTIONS`.
 
 3. **PSI layer** (`psi/`) — Each declaration type has its own class extending `SliccNamedElement` (which enables rename/navigation). Key nodes: `SliccMachineDecl`, `SliccStructureDecl`, `SliccEnumerationDecl`, `SliccStateDecl`, `SliccActionDecl`, `SliccTransitionDecl`, `SliccFunctionDecl`, `SliccIn/OutPortDecl`, `SliccFieldDecl`, `SliccEnumMember`, `SliccIncludeDecl`.
 
@@ -69,17 +72,19 @@ Source file → Lexer → Parser → PSI Tree → Annotator / Reference / Comple
 5. **Navigation & Resolution** (`navigation/`)
    - `SliccReference` — delegates resolution to the shared `SliccGotoDeclarationHandler` resolver, preserving block scope, local/parameter shadowing, member ownership, and overload selection. Implicit action `cache_entry` navigates to the machine's primary structure implementing `AbstractCacheEntry` (such as `Entry` or CHI's `CacheEntry`): omitted `main` defaults to true and case-insensitive `main="false"` excludes non-default types. Candidate lists reuse the cached function scope. `resolveImplicitVariableType` shares this selection with completion, expression inference, and inlay hints, mapping completion PSI copies through the original file. Implicit `tbe` navigates to `TBE`; explicit parameters and local variables take priority, and missing or ambiguous types must not fall back to unrelated declarations. Find Usages compares resolved PSI declarations rather than names and declaration kinds alone.
    - `SliccMessageScope` — shares message-variable visibility and type inference across completion, highlighting, reference resolution, and navigation. Explicit function parameters named `in_msg` or `out_msg` take priority throughout the function, including nested `peek` / `enqueue` bodies, and use their declared types. Without a matching parameter, implicit `in_msg` belongs to a `peek` body and `out_msg` to an `enqueue` body; each takes its type from the second argument of the nearest matching enclosing statement. Nested blocks inherit the surrounding implicit bindings.
+   - `SliccPorts` — Shares scope-aware logical port binding: `in_port` names have fixed type `InPort` and `out_port` names have fixed type `OutPort`; their second parameter is a message type, never the port receiver type. Resolve methods through the visible SLICC declarations in `RubySlicc_Types.sm` and the normal member/function pipeline for completion, navigation/references, diagnostics, parameter information, and return-type inference. Explicit parameters, preceding locals, and machine fields take priority. Defer duplicate ports, ambiguous receiver declarations, and multiple machine owners; do not borrow an unrelated machine's same-named port or let hidden ports suppress a visible free function.
    - `SliccActionNavigation` — resolves action references in transition action lists within machine/include scope and collects referencing transitions, including all machine roots that include a shared action file via `SliccProtocolIndex.allMachineFilesContaining`. The UI goto handler reverses action-declaration navigation into one or more transition targets, while semantic references still resolve to the action declaration itself. Both transition body forms use `TRANSITION_ACTIONS` PSI nodes.
    - `SliccFunctionNavigation` — connects prototypes, definitions, and calls by parameter-type signature and machine/include/type ownership. Calls prefer matching definitions across files; a definition name, or a declaration without any matching SLICC definition, reverses UI navigation to concrete calling statements in functions/actions without changing its semantic self-reference. `findCallSites` deduplicates by enclosing statement, not by caller. `SliccUsageSite` uses a smart PSI pointer to present complete multiline statements on one line with file/line context and navigate to the actual call offset. Labels default to 160 Unicode code points including an ellipsis; the IDE VM property `slicc.navigation.maxStatementLength` overrides the limit (minimum 1). Declarations with definitions still navigate to those definitions, and calls to declaration-only functions still navigate to their declarations. Shared prototypes are resolved in the caller's machine context; member and free-function namespaces remain separate. Scope data is cached per file against PSI modifications. Find Usages recognizes a prototype and definition as the same function, but not unrelated same-named overloads or machine/type members.
    - `SliccProtocolIndex` — shares a project-level protocol/machine/include graph with reverse file-to-scope lookups, including globals via `RubySlicc_interfaces.slicc`. File-level include nodes are cached independently; project graph dependencies cover PSI, VFS structure, and project-root changes. Preserve first matching protocol/machine behavior and all-machine unions for reverse navigation.
-   - `SliccDebugFlags` — Caches literal `DebugFlag` / `CompoundFlag` names from the related Ruby/Kconfig/SConscript source graph for `DPRINTF` first-argument completion and diagnostics. Track source/document dependencies and completeness; unavailable or incomplete sources must defer unknown-flag errors, not invent a global fallback.
-   - `SliccPrintfDiagnostics` — Checks `DPRINTF` flag presence/known-source validity and literal `DPRINTF` / `DPRINTFN` format argument counts. `DPRINTFN` has no flag; `%%` consumes none, and each star width/precision consumes one. Split outer arguments without losing nested-call commas. This is count-only, not type validation; dynamic/unsupported formats, incomplete calls, and indexing defer the relevant checks.
-   - `SliccTransitionDiagnostics` — Reports missing transition actions and later duplicate expanded state/event pairs in machine/include expansion order. Cache file/scope results with appropriate PSI/VFS/root dependencies, preserve machine isolation/cancellation, and defer ambiguous or incomplete contexts and indexing.
+   - `SliccDebugFlags` — Caches literal `DebugFlag` / `CompoundFlag` names from all `SConscript` files in the gem5 checkout or current project for `DPRINTF` first-argument completion and diagnostics, including non-Ruby declarations such as `HtmMem` in `src/mem/SConscript`. This project-wide debug-flag discovery is separate from the reachable-source-only external C++ type graph. Track source/document dependencies and completeness; unavailable or incomplete sources must defer unknown-flag errors.
+   - `SliccPrintfDiagnostics` — Checks `DPRINTF` flag presence/known-source validity and literal `DPRINTF` / `DPRINTFN` format argument counts. Only format argument-count mismatches use `WARNING`; missing/definitely unknown debug flags and missing format strings retain `ERROR`. `DPRINTFN` has no flag; `%%` consumes none, and each star width/precision consumes one. Split outer arguments without losing nested-call commas. This is count-only, not type validation; dynamic/unsupported formats, incomplete calls, and indexing defer the relevant checks. Do not add format-count validation to `APPEND_TRANSITION_COMMENT` as part of this severity change.
+   - `SliccTransitionDiagnostics` — Reports missing transition actions and later duplicate expanded state/event pairs in machine/include expansion order. State/event and action lists use gem5's `idents` grammar: whitespace, comma, or semicolon separators may be mixed, with an optional trailing comma/semicolon. Do not discard valid CHI multiline lists without commas at line breaks; retain malformed-list guards. Do not interpret optional transition resource names as actions. A third next-state argument of `*` is legal and must not disable checks on the first two arguments or transition actions. Cache file/scope results with appropriate PSI/VFS/root dependencies, preserve machine isolation/cancellation, and defer ambiguous or incomplete contexts and indexing.
    - `SliccCallDiagnostics` — Reports definitely missing visible free or supported scoped function names, not argument compatibility. Existing overloads with mismatched arguments are not absent functions; constructors/built-ins and lexical shadowing retain their guards. Dot-RHS errors belong to `SliccMemberDiagnostics`; unknown receivers and incomplete/ambiguous scope information defer checks.
+   - `SliccGeneratedFunctions` — Recognises generated enum/state helper calls without new keyword tokens. Reuse the cached function scope and file symbols, using gem5's generated type identifier: global `EnumName_to_string`, machine-local `MachineName_EnumName_to_string`, and state `_to_permission` helpers such as `L1Cache_State_to_permission`. Machine-owned types carrying `external` or `primitive` use the type name or `external_name` instead of a machine prefix. Semantic/UI navigation resolves to the generating enum/state declaration and calls use function highlighting. Preserve explicit function/variable priority, machine/include ownership, indexing deferral, and ambiguity guards; do not accept arbitrary suffixes.
    - `SliccFileSymbols` — caches declaration lists by name and declaration class against the containing PSI file, preserving source order. Reuse it in resolution and highlighting instead of repeatedly walking every file for each identifier.
    - `SliccExpressionTypes` — Conservative scope-aware expression model for function-result diagnostics. A `Session` infers supported simple variables, fields, free/member/scoped calls, nested calls, parentheses, and supported literals. Select overload candidates by argument compatibility, never the assignment target's desired return type. Compare nominal SLICC base types and supported `interface` relationships; reference/pointer call qualifiers are not C++ conversion rules, `primitive="yes"` does not make every external type numeric, and `external_name` does not merge distinct SLICC declarations. Unknown types/arguments, ambiguous owners/types, conflicting overloads, incomplete declarations, complex operators, indexed expressions, and indexing defer diagnostics rather than causing cascades. Reuse per-session resolution state and preserve cancellation; do not fall back to unrelated project-wide names.
    - `SliccTypeDiagnostics` — Reports definite mismatches for function-result assignments/initializers and function results passed to other calls, including invalid use of `void` results. Track call-containing expressions rather than validating every raw argument or function-body `return` statement. Underline the result expression or offending inner-call argument. Preserve gem5 assignment-only legacy exemptions for expected `NetDest`, actual `Set`, and the inverse interface relationship; do not apply those exemptions to function arguments or add blanket numeric/C++ implicit conversions. Keep this check separate from `SliccMemberDiagnostics`, whose dot-RHS check remains name-only.
-   - `SliccExternalTypeNavigation` — handles declaration-name UI navigation from `structure(..., external="yes")` and `external_type` to reachable C++ type definitions or supported aliases. Applies `external_name`, `gem5::ruby` ownership (`gem5` fallback for `external_type`), template-base lookup, standard scalar/std/Scalar exemptions, and `InPort`/`OutPort` mapping to `MessageBuffer`. `SliccRubyBuildScope` locates the related Ruby Kconfig/SConscript root, collects supported literal `Source`/`MakeInclude`/`SLICC_INCLUDES` entries and transitive C++ includes, maps generated protocol headers back to their sources, and caches source/document dependencies. `SliccCppTypes` recognizes supported source-level type/alias definitions; `SliccCppTypeTarget` preserves source offsets for navigation. Missing definitions produce errors; unavailable source context produces warnings, while indexing defers lookup. Semantic SLICC references still resolve to SLICC declarations. The static graph unions conditional branches without executing Kconfig/SCons or preprocessing C++; computed paths, macro-generated definitions, and C++ member/call navigation are not implemented. See [RUBY_CPP_INTEGRATION.md](RUBY_CPP_INTEGRATION.md) for the inspected file tree and analysis boundaries.
+   - `SliccExternalTypeNavigation` — handles declaration-name UI navigation from `structure(..., external="yes")` and `external_type` to reachable C++ type definitions or supported aliases. Machine-owned unqualified names prefer `gem5::ruby::<protocol>::Name`, then `gem5::ruby::Name`; never scan other protocol namespaces. Applies exact qualified `external_name`, the `gem5` fallback for `external_type`, template-base lookup, standard scalar/std/Scalar exemptions, and `InPort`/`OutPort` mapping to `MessageBuffer`. `SliccRubyProtocols` separately caches protocol ownership from Kconfig `RUBY_PROTOCOL_*` suffixes, normalised `bool` prompt aliases, `.slicc` protocol literals, and transitive literal includes; unknown or ambiguous ownership must not guess a protocol. `SliccRubyBuildScope` locates the related Ruby Kconfig/SConscript root, collects supported literal `Source`/`MakeInclude`/`SLICC_INCLUDES` entries and transitive C++ includes, maps generated protocol headers back to their sources, and caches source/document dependencies. Keep the lightweight protocol graph separate so ordinary SLICC edits do not rebuild the C++ source graph. `SliccCppTypes` recognizes supported source-level type/alias definitions; `SliccCppTypeTarget` preserves source offsets for navigation. Missing definitions produce errors; unavailable source context produces warnings, while indexing defers lookup. Semantic SLICC references still resolve to SLICC declarations. The static graph unions conditional branches without executing Kconfig/SCons or preprocessing C++; computed paths, macro-generated definitions, and C++ member/call navigation are not implemented. See [RUBY_CPP_INTEGRATION.md](RUBY_CPP_INTEGRATION.md) for the inspected file tree and analysis boundaries.
    - `SliccMemberNavigation` — reverses structure-field and enum/state-constant declaration navigation into actual usage statements, deduplicated per statement and filtered by semantic PSI identity. Uses the shared cached `SliccFunctionNavigation.Scope` for type/machine/include ownership, direct field lookup, supported interface inheritance, and qualified enum resolution. Transition state/event references use their respective `State`/`Event` types; ambiguous unqualified constants are not guessed. `SliccUsageSite` is shared by function calls and member usages, preserving smart pointers, multiline previews, configurable truncation, and actual identifier offsets. The semantic resolver still maps references to declarations, never to usage-site UI targets.
    - `SliccGotoSymbolContributor` — Ctrl+Alt+Shift+N symbol search
    - `SliccStructureViewFactory` — Alt+7 structure tree (machine → in_ports, out_ports, actions, transitions, functions). Uses plugin-owned tree elements implementing the public structure-view interfaces with smart PSI pointers, avoiding the implementation base class unavailable in 2026.2.
@@ -107,7 +112,38 @@ External C++ lookup is separate from the SLICC protocol symbol index: it remains
 within the detected Ruby root and explicitly reachable dependencies, rather than
 falling back to unrelated same-named definitions elsewhere in the project. Open
 the full gem5 checkout to resolve common types whose headers are outside a copied
-Ruby subtree.
+Ruby subtree. For machine-owned unqualified external names, prefer the unique
+owning protocol's exact `gem5::ruby::<protocol>::Name`, then `gem5::ruby::Name`.
+Outside machine ownership, prefer the shared Ruby name before the unique protocol
+candidate. Missing or ambiguous protocol metadata permits only the shared Ruby
+candidate, not a scan through descendant namespaces. Kconfig symbol suffixes
+preserve case and define the protocol namespace; prompt whitespace normalisation
+only creates aliases for matching `.slicc` protocol literals. Preserve qualified
+`external_name` values, multiple-target selection for the same exact candidate,
+the `external_type` exact `gem5` fallback, and source ownership boundaries.
+Only literal include edges issued inside a machine propagate machine ownership;
+globals and machine-external includes in the same file remain shared-Ruby-first.
+When a machine's protocol is unknown or conflicting and the shared fallback also
+misses, return unavailable-context warnings rather than definite missing-type
+errors. Keep per-file source token caches reusable across protocol graph rebuilds
+and avoid rebuilding the C++ graph for ordinary SLICC document edits.
+Project-bound `CachedValue` instances must never be stored in `VirtualFile` user
+data: real IDE VFS implementations reject them with a leak-guard assertion. Store
+per-file protocol token values in a project-owned map keyed by `VirtualFile`,
+preserving source/document/root dependencies and project disposal boundaries.
+
+Non-string enumeration defaults such as `EnumName_MemberName` resolve only through
+the declared enum type and visible machine/include scope. Match complete combined
+spellings instead of splitting on an arbitrary underscore; defer ambiguous types
+or members and keep navigation targets on the actual enum member declaration.
+
+Generated enum/state helpers follow gem5's generated type identifier, not just the
+SLICC declaration name. Ordinary machine-owned enums/states add a machine prefix;
+global types and machine types carrying `external` or `primitive` use their type
+name or applicable `external_name`. Resolve `_to_string` and state `_to_permission`
+calls to the generating declaration without requiring a handwritten function.
+Preserve explicit functions/variables, machine/include ownership, and ambiguity
+guards rather than accepting arbitrary names by suffix alone.
 
 ### Registration
 

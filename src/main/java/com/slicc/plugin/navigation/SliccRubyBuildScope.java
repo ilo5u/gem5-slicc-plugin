@@ -89,7 +89,7 @@ final class SliccRubyBuildScope {
         }, false)).getValue();
     }
 
-    private static List<VirtualFile> kconfigIncludes(VirtualFile config, VirtualFile root) {
+    static List<VirtualFile> kconfigIncludes(VirtualFile config, VirtualFile root) {
         List<VirtualFile> result = new ArrayList<>();
         List<SliccSourceTokens.Token> tokens = SliccSourceTokens.read(text(config), true);
         for (int index = 0; index + 1 < tokens.size(); index++) {

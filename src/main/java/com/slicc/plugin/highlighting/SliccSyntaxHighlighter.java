@@ -193,7 +193,6 @@ public class SliccSyntaxHighlighter extends SyntaxHighlighterBase {
         // SLICC built-in statement keywords
         if (type == SliccTokenTypes.KW_PEEK
                 || type == SliccTokenTypes.KW_ENQUEUE
-                || type == SliccTokenTypes.KW_DEQUEUE
                 || type == SliccTokenTypes.KW_TRIGGER
                 || type == SliccTokenTypes.KW_STALL_AND_WAIT
                 || type == SliccTokenTypes.KW_WAKEUP_PORT
@@ -207,15 +206,17 @@ public class SliccSyntaxHighlighter extends SyntaxHighlighterBase {
                 || type == SliccTokenTypes.KW_STATIC_CAST
                 || type == SliccTokenTypes.KW_NEW
                 || type == SliccTokenTypes.KW_IS_VALID
-                || type == SliccTokenTypes.KW_IS_INVALID
-                || type == SliccTokenTypes.KW_IS_READY) {
+                || type == SliccTokenTypes.KW_IS_INVALID) {
             return pack(BUILTIN_STMT);
         }
         // Attribute keywords
         if (type == SliccTokenTypes.KW_DESC
                 || type == SliccTokenTypes.KW_MAIN
                 || type == SliccTokenTypes.KW_BLOCK_ON
+                || type == SliccTokenTypes.KW_WAKE_UP
                 || type == SliccTokenTypes.KW_FORMAT
+                || type == SliccTokenTypes.KW_RSC_STALL_HANDLER
+                || type == SliccTokenTypes.KW_PROT_STALL_HANDLER
                 || type == SliccTokenTypes.KW_IN_TRANS
                 || type == SliccTokenTypes.KW_OUT_TRANS
                 || type == SliccTokenTypes.KW_DEFAULT
@@ -224,6 +225,7 @@ public class SliccSyntaxHighlighter extends SyntaxHighlighterBase {
                 || type == SliccTokenTypes.KW_VNET_TYPE
                 || type == SliccTokenTypes.KW_RANK
                 || type == SliccTokenTypes.KW_RETURN_BY_POINTER
+                || type == SliccTokenTypes.KW_RETURN_BY_REF
                 || type == SliccTokenTypes.KW_INTERFACE
                 || type == SliccTokenTypes.KW_EXTERNAL
                 || type == SliccTokenTypes.KW_PRIMITIVE

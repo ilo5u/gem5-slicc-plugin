@@ -61,7 +61,8 @@ public final class SliccCallDiagnostics {
             if (name.equals(variable.getName())) return null;
         }
         TypeLookup constructor = type(scope, name);
-        if (constructor.ambiguous() || constructor.declaration() != null || generated(scope, name)) return null;
+        if (constructor.ambiguous() || constructor.declaration() != null || generated(scope, name)
+                || SliccGeneratedFunctions.resolve(callName) != null) return null;
         SliccNamedElement owner = PsiTreeUtil.getParentOfType(callName,
                 SliccStructureDecl.class, SliccExternalTypeDecl.class);
         if (owner != null && !Boolean.FALSE.equals(member(scope, owner, name))) return null;

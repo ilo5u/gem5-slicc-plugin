@@ -42,7 +42,6 @@ public class SliccLexer extends LexerBase {
         KEYWORDS.put("peek",             SliccTokenTypes.KW_PEEK);
         KEYWORDS.put("new",              SliccTokenTypes.KW_NEW);
         KEYWORDS.put("enqueue",          SliccTokenTypes.KW_ENQUEUE);
-        KEYWORDS.put("dequeue",          SliccTokenTypes.KW_DEQUEUE);
         KEYWORDS.put("trigger",          SliccTokenTypes.KW_TRIGGER);
         KEYWORDS.put("stall_and_wait",   SliccTokenTypes.KW_STALL_AND_WAIT);
         KEYWORDS.put("wakeup_port",      SliccTokenTypes.KW_WAKEUP_PORT);
@@ -57,12 +56,14 @@ public class SliccLexer extends LexerBase {
         }
         KEYWORDS.put("is_valid",         SliccTokenTypes.KW_IS_VALID);
         KEYWORDS.put("is_invalid",       SliccTokenTypes.KW_IS_INVALID);
-        KEYWORDS.put("isReady",          SliccTokenTypes.KW_IS_READY);
 
         KEYWORDS.put("desc",            SliccTokenTypes.KW_DESC);
         KEYWORDS.put("main",            SliccTokenTypes.KW_MAIN);
         KEYWORDS.put("block_on",        SliccTokenTypes.KW_BLOCK_ON);
+        KEYWORDS.put("wake_up",         SliccTokenTypes.KW_WAKE_UP);
         KEYWORDS.put("format",          SliccTokenTypes.KW_FORMAT);
+        KEYWORDS.put("rsc_stall_handler", SliccTokenTypes.KW_RSC_STALL_HANDLER);
+        KEYWORDS.put("prot_stall_handler", SliccTokenTypes.KW_PROT_STALL_HANDLER);
         KEYWORDS.put("in_trans",        SliccTokenTypes.KW_IN_TRANS);
         KEYWORDS.put("out_trans",       SliccTokenTypes.KW_OUT_TRANS);
         KEYWORDS.put("default",         SliccTokenTypes.KW_DEFAULT);
@@ -71,6 +72,7 @@ public class SliccLexer extends LexerBase {
         KEYWORDS.put("vnet_type",       SliccTokenTypes.KW_VNET_TYPE);
         KEYWORDS.put("rank",            SliccTokenTypes.KW_RANK);
         KEYWORDS.put("return_by_pointer", SliccTokenTypes.KW_RETURN_BY_POINTER);
+        KEYWORDS.put("return_by_ref",     SliccTokenTypes.KW_RETURN_BY_REF);
         KEYWORDS.put("interface",       SliccTokenTypes.KW_INTERFACE);
         KEYWORDS.put("external",        SliccTokenTypes.KW_EXTERNAL);
         KEYWORDS.put("primitive",       SliccTokenTypes.KW_PRIMITIVE);

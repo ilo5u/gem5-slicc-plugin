@@ -335,13 +335,12 @@ public class SliccParser implements PsiParser, LightPsiParser {
         // optional next state
         if (b.getTokenType() == SliccTokenTypes.OP_COMMA) {
             b.advanceLexer();
-            parseTransitionStateList(b);
+            if (b.getTokenType() == SliccTokenTypes.OP_STAR) b.advanceLexer();
+            else parseTransitionStateList(b);
         }
         expectToken(b, SliccTokenTypes.OP_RPAREN, "')'");
         // optional resource list {TagArrayRead, ...}
         if (b.getTokenType() == SliccTokenTypes.OP_LBRACE) {
-            // peek ahead: if first token after { is an identifier followed by } or ,
-            // and no statements, treat as resource list
             parseResourceListOrBlock(b, m);
             return true;
         }
@@ -350,59 +349,37 @@ public class SliccParser implements PsiParser, LightPsiParser {
     }
 
     private void parseResourceListOrBlock(PsiBuilder b, Marker transitionMarker) {
-        // Check if this brace block is a resource list (identifiers only, no statements)
-        // We use a heuristic: consume it as block, mark as transition
-        Marker resMarker = b.mark();
-        b.advanceLexer(); // '{'
-        // collect resource list items
-        boolean isResourceList = true;
+        Marker lookahead = b.mark();
         int depth = 1;
-        // lookahead: check whether contents look like action calls or resource identifiers
-        // Resource list = { Ident [, Ident]* } with no semicolons or := inside
-        // We use simple heuristic: if there's a ';' or ':=' it's a block, else resource list
-        PsiBuilder.Marker lookahead = b.mark();
+        b.advanceLexer();
         while (!b.eof() && depth > 0) {
-            IElementType t = b.getTokenType();
-            if (t == SliccTokenTypes.OP_LBRACE) depth++;
-            if (t == SliccTokenTypes.OP_RBRACE) { depth--; if (depth == 0) break; }
-            if (t == SliccTokenTypes.OP_SEMICOLON || t == SliccTokenTypes.OP_ASSIGN) {
-                isResourceList = false;
-                break;
-            }
+            IElementType token = b.getTokenType();
+            if (isBlockDeclarationStart(token)) break;
+            if (token == SliccTokenTypes.OP_LBRACE) depth++;
+            else if (token == SliccTokenTypes.OP_RBRACE) depth--;
             b.advanceLexer();
         }
+        boolean isResourceList = depth == 0 && b.getTokenType() == SliccTokenTypes.OP_LBRACE;
         lookahead.rollbackTo();
-
         if (isResourceList) {
-            // parse resource list
-            while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_RBRACE) {
-                if (b.getTokenType() == SliccTokenTypes.IDENTIFIER) b.advanceLexer();
-                else if (b.getTokenType() == SliccTokenTypes.OP_COMMA) b.advanceLexer();
-                else b.advanceLexer();
+            Marker resources = b.mark();
+            b.advanceLexer();
+            while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_RBRACE
+                    && !isBlockDeclarationStart(b.getTokenType())) {
+                b.advanceLexer();
             }
             expectToken(b, SliccTokenTypes.OP_RBRACE, "'}'");
-            resMarker.done(SliccTypes.RESOURCE_LIST);
-            // now expect the actual action block
-            if (b.getTokenType() == SliccTokenTypes.OP_LBRACE) {
-                parseTransitionActionBlock(b);
-            }
-        } else {
-            // it's the action block directly
-            while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_RBRACE) {
-                int before = b.getCurrentOffset();
-                if (!parseStatement(b)) b.advanceLexer();
-                if (b.getCurrentOffset() == before) b.advanceLexer(); // safety
-            }
-            expectToken(b, SliccTokenTypes.OP_RBRACE, "'}'");
-            resMarker.done(SliccTypes.TRANSITION_ACTIONS);
+            resources.done(SliccTypes.RESOURCE_LIST);
         }
+        parseTransitionActionBlock(b);
         transitionMarker.done(SliccTypes.TRANSITION_DECL);
     }
 
     private void parseTransitionActionBlock(PsiBuilder b) {
         Marker m = b.mark();
         b.advanceLexer(); // '{'
-        while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_RBRACE) {
+        while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_RBRACE
+                && !isBlockDeclarationStart(b.getTokenType())) {
             if (b.getTokenType() == SliccTokenTypes.IDENTIFIER) {
                 b.advanceLexer();
                 if (b.getTokenType() == SliccTokenTypes.OP_SEMICOLON) b.advanceLexer();
@@ -569,13 +546,23 @@ public class SliccParser implements PsiParser, LightPsiParser {
         if (b.getTokenType() != SliccTokenTypes.OP_LBRACE) return;
         Marker m = b.mark();
         b.advanceLexer();
-        while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_RBRACE) {
+        while (!b.eof() && b.getTokenType() != SliccTokenTypes.OP_RBRACE
+                && !isBlockDeclarationStart(b.getTokenType())) {
             int before = b.getCurrentOffset();
             if (!parseStatement(b)) b.advanceLexer();
             if (b.getCurrentOffset() == before) b.advanceLexer(); // safety
         }
         expectToken(b, SliccTokenTypes.OP_RBRACE, "'}'");
         m.done(SliccTypes.BLOCK);
+    }
+
+    private boolean isBlockDeclarationStart(IElementType token) {
+        return token == SliccTokenTypes.KW_ACTION || token == SliccTokenTypes.KW_TRANSITION
+                || token == SliccTokenTypes.KW_MACHINE || token == SliccTokenTypes.KW_STRUCTURE
+                || token == SliccTokenTypes.KW_ENUMERATION || token == SliccTokenTypes.KW_STATE_DECLARATION
+                || token == SliccTokenTypes.KW_EXTERNAL_TYPE || token == SliccTokenTypes.KW_IN_PORT
+                || token == SliccTokenTypes.KW_OUT_PORT || token == SliccTokenTypes.KW_GLOBAL
+                || token == SliccTokenTypes.KW_INCLUDE || token == SliccTokenTypes.KW_PROTOCOL;
     }
 
     // ......... Statement .................................................................................................................................................................................
@@ -589,7 +576,6 @@ public class SliccParser implements PsiParser, LightPsiParser {
         // peek / enqueue / stall_and_wait / check_allocate
         if (tt == SliccTokenTypes.KW_PEEK
                 || tt == SliccTokenTypes.KW_ENQUEUE
-                || tt == SliccTokenTypes.KW_DEQUEUE
                 || tt == SliccTokenTypes.KW_STALL_AND_WAIT
                 || tt == SliccTokenTypes.KW_CHECK_ALLOCATE
                 || tt == SliccTokenTypes.KW_WAKEUP_PORT
@@ -605,7 +591,6 @@ public class SliccParser implements PsiParser, LightPsiParser {
                 || tt == SliccTokenTypes.KW_UNSET_TBE
                 || tt == SliccTokenTypes.KW_IS_VALID
                 || tt == SliccTokenTypes.KW_IS_INVALID
-                || tt == SliccTokenTypes.KW_IS_READY
                 || tt == SliccTokenTypes.KW_STATIC_CAST) {
             parseBuiltinStmt(b); return true;
         }
@@ -696,6 +681,7 @@ public class SliccParser implements PsiParser, LightPsiParser {
         int depth = 0;
         while (!b.eof()) {
             IElementType t = b.getTokenType();
+            if (isBlockDeclarationStart(t)) break;
             if (t == terminator && depth == 0) break;
             if (t == SliccTokenTypes.OP_LBRACE || t == SliccTokenTypes.OP_LPAREN
                     || t == SliccTokenTypes.OP_LBRACKET) depth++;
@@ -819,11 +805,15 @@ public class SliccParser implements PsiParser, LightPsiParser {
     private boolean isAttrKeyword(IElementType t) {
         return t == SliccTokenTypes.KW_DESC || t == SliccTokenTypes.KW_MAIN
                 || t == SliccTokenTypes.KW_BLOCK_ON || t == SliccTokenTypes.KW_FORMAT
+                || t == SliccTokenTypes.KW_WAKE_UP
+                || t == SliccTokenTypes.KW_RSC_STALL_HANDLER
+                || t == SliccTokenTypes.KW_PROT_STALL_HANDLER
                 || t == SliccTokenTypes.KW_DEFAULT
                 || t == SliccTokenTypes.KW_IN_TRANS || t == SliccTokenTypes.KW_OUT_TRANS
                 || t == SliccTokenTypes.KW_NETWORK || t == SliccTokenTypes.KW_VIRTUAL_NETWORK
                 || t == SliccTokenTypes.KW_VNET_TYPE || t == SliccTokenTypes.KW_RANK
                 || t == SliccTokenTypes.KW_RETURN_BY_POINTER
+                || t == SliccTokenTypes.KW_RETURN_BY_REF
                 || t == SliccTokenTypes.KW_INTERFACE || t == SliccTokenTypes.KW_EXTERNAL
                 || t == SliccTokenTypes.KW_PRIMITIVE || t == SliccTokenTypes.KW_ORDERED
                 || t == SliccTokenTypes.KW_TEMPLATE || t == SliccTokenTypes.KW_CONSTRUCTOR

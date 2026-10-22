@@ -38,7 +38,10 @@ public class SliccReference extends PsiReferenceBase<PsiElement> {
     public boolean isReferenceTo(@NotNull PsiElement element) {
         if (!(element instanceof SliccNamedElement named)) return false;
         String targetName = named.getName();
-        if (targetName == null || !targetName.equals(myKey)) return false;
+        if (targetName == null || !targetName.equals(myKey)
+                && !(named instanceof SliccEnumMember member && SliccEnumDefaults.isAlias(myElement, member))
+                && !((named instanceof SliccEnumerationDecl || named instanceof SliccStateDecl)
+                && named.equals(SliccGeneratedFunctions.resolve(myElement)))) return false;
         PsiElement resolved = resolve();
         if (resolved == null) return false;
         if (resolved instanceof SliccFunctionDecl function && element instanceof SliccFunctionDecl target) {

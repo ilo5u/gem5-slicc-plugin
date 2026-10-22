@@ -259,6 +259,27 @@ public final class SliccFunctionNavigation {
         }
 
         @Nullable
+        String generatedTypeName(SliccNamedElement declaration) {
+            String name = declaration.getName();
+            if (name == null) return null;
+            Set<SliccMachineDecl> declaredOwners = owners(declaration);
+            if (declaredOwners.isEmpty()) return name;
+            if (SliccExternalTypeNavigation.attribute(declaration, "external") != null
+                    || SliccExternalTypeNavigation.attribute(declaration, "primitive") != null) {
+                String externalName = SliccExternalTypeNavigation.attribute(declaration, "external_name");
+                return externalName == null ? name : externalName;
+            }
+            Set<SliccMachineDecl> contextOwners = owners(context);
+            SliccMachineDecl selected = null;
+            for (SliccMachineDecl machine : declaredOwners) {
+                if (contextOwners.stream().noneMatch(owner -> equivalent(owner, machine))) continue;
+                if (selected != null) return null;
+                selected = machine;
+            }
+            return selected == null || selected.getName() == null ? null : selected.getName() + "_" + name;
+        }
+
+        @Nullable
         SliccStructureDecl cacheEntryType() {
             if (hasAmbiguousOwners()) return null;
             SliccStructureDecl selected = null;
@@ -298,7 +319,7 @@ public final class SliccFunctionNavigation {
             return result;
         }
 
-        private List<SliccFunctionDecl> members(String type, String name, Set<String> visited) {
+        List<SliccFunctionDecl> members(String type, String name, Set<String> visited) {
             if (!visited.add(type)) return List.of();
             PsiElement selected = typeDeclaration(type, false);
             if (selected == null) return List.of();
@@ -314,6 +335,7 @@ public final class SliccFunctionNavigation {
         SliccNamedElement typeDeclaration(String type, boolean enumeration) {
             SliccNamedElement selected = null;
             int bestRank = Integer.MAX_VALUE;
+            boolean ambiguous = false;
             for (PsiFile file : files) {
                 for (SliccNamedElement candidate : SliccFileSymbols.named(file, type)) {
                     boolean matchesKind = enumeration
@@ -325,10 +347,13 @@ public final class SliccFunctionNavigation {
                     if (rank >= 0 && rank < bestRank) {
                         selected = candidate;
                         bestRank = rank;
+                        ambiguous = false;
+                    } else if (rank >= 0 && rank == bestRank && candidate != selected) {
+                        ambiguous = true;
                     }
                 }
             }
-            return selected;
+            return ambiguous ? null : selected;
         }
     }
 }

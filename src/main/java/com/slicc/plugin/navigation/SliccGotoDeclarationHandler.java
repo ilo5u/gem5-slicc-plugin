@@ -13,6 +13,7 @@ import com.slicc.plugin.psi.*;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -406,6 +407,34 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         return result;
     }
 
+    @org.jetbrains.annotations.NotNull
+    public static List<SliccFunctionDecl> collectMemberFunctionOverloadsInContext(
+            String typeName, String functionName, PsiElement context) {
+        SliccFunctionNavigation.Scope scope = new SliccFunctionNavigation.Scope(context);
+        return scope.hasAmbiguousOwners() ? List.of() : scope.members(typeName, functionName, new HashSet<>());
+    }
+
+    @org.jetbrains.annotations.NotNull
+    public static List<SliccNamedElement> collectMembersOfTypeInContext(String typeName, PsiElement context) {
+        SliccFunctionNavigation.Scope scope = new SliccFunctionNavigation.Scope(context);
+        if (scope.hasAmbiguousOwners()) return List.of();
+        List<SliccNamedElement> result = new ArrayList<>();
+        Set<String> seenNames = new HashSet<>();
+        Set<String> visited = new HashSet<>();
+        String current = typeName;
+        while (current != null && visited.add(current)) {
+            SliccNamedElement declaration = scope.typeDeclaration(current, false);
+            if (declaration == null) break;
+            for (PsiElement child : declaration.getChildren()) {
+                if (child instanceof SliccNamedElement member
+                        && (member instanceof SliccFieldDecl || member instanceof SliccFunctionDecl)
+                        && member.getName() != null && seenNames.add(member.getName())) result.add(member);
+            }
+            current = declaration instanceof SliccStructureDecl structure ? getStructureInterface(structure) : null;
+        }
+        return result;
+    }
+
     /**
      * named {@code typeName}, following the interface inheritance chain.
      * Deduplicates by name (first declaration wins).
@@ -534,6 +563,11 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
             return new PsiElement[]{sourceElement};
         }
 
+        SliccEnumDefaults.Resolution enumDefault = SliccEnumDefaults.resolve(sourceElement);
+        if (enumDefault.handled()) {
+            return enumDefault.member() == null ? null : new PsiElement[]{enumDefault.member()};
+        }
+
         if (SliccActionNavigation.isTransitionActionReference(sourceElement)) {
             SliccActionDecl action = SliccActionNavigation.resolveAction(sourceElement);
             if (action == null) return null;
@@ -592,6 +626,13 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         PsiElement localResult = isTypeRef ? null : searchLocalScope(sourceElement, key);
         if (localResult != null) return new PsiElement[]{localResult};
 
+        if (!isTypeRef && !isDotAccess && !isColonAccess) {
+            SliccPorts.Binding port = SliccPorts.resolve(key, sourceElement);
+            if (port.knownName()) {
+                return port.declaration() == null ? null : new PsiElement[]{port.declaration()};
+            }
+        }
+
         if (!isTypeRef && !isDotAccess && !isColonAccess
                 && isInActionBody(sourceElement) && IMPLICIT_VARIABLES.contains(key)) {
             PsiElement typeTarget = resolveImplicitType(key, sourceElement);
@@ -607,6 +648,8 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         if (argTypes != null) {
             List<SliccFunctionDecl> functions = SliccFunctionNavigation.resolveCall(sourceElement);
             if (!functions.isEmpty()) return functions.toArray(PsiElement[]::new);
+            SliccNamedElement generated = SliccGeneratedFunctions.resolve(sourceElement);
+            if (generated != null) return new PsiElement[]{generated};
             PsiElement type = findTypeInAllScopes(key, file);
             return type == null ? null : new PsiElement[]{type};
         }
@@ -807,8 +850,6 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
     private static List<SliccNamedElement> collectAllDeclarations(PsiFile file, String name, boolean includeMemberFunctions) {
         List<SliccNamedElement> result = collectTypeDeclarations(file, name);
         result.addAll(SliccFileSymbols.named(file, name, SliccActionDecl.class));
-        result.addAll(SliccFileSymbols.named(file, name, SliccInPortDecl.class));
-        result.addAll(SliccFileSymbols.named(file, name, SliccOutPortDecl.class));
         // Only include machine-level fields (not local vars/params, and not struct members).
         // Struct member fields are only reachable via dot access and are resolved by findMemberInAllScopes.
         for (SliccFieldDecl f : SliccFileSymbols.named(file, name, SliccFieldDecl.class)) {
@@ -987,6 +1028,8 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         for (SliccFieldDecl field : collectVisibleVariables(contextElement, effectiveFile)) {
             if (ownerName.equals(field.getName())) return extractTypeFromField(field);
         }
+        SliccPorts.Binding port = SliccPorts.resolve(ownerName, contextElement, effectiveFile);
+        if (port.knownName()) return port.type();
         String implicit = resolveImplicitVariableType(ownerName, contextElement, effectiveFile);
         if (implicit != null) return implicit;
 
@@ -1062,19 +1105,7 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
         for (SliccFieldDecl field : collectVisibleVariables(position, file)) {
             if (varName.equals(field.getName())) return extractTypeFromField(field);
         }
-        for (PsiFile f : collectSearchFiles(file)) {
-            for (SliccInPortDecl port : SliccFileSymbols.ofType(f, SliccInPortDecl.class)) {
-                if (varName.equals(port.getName())) {
-                    com.intellij.lang.ASTNode typeRef = port.getNode().findChildByType(SliccTypes.TYPE_REF);
-                    if (typeRef != null) {
-                        com.intellij.lang.ASTNode typeId = typeRef.findChildByType(SliccTokenTypes.IDENTIFIER);
-                        if (typeId != null) return typeId.getText();
-                    }
-                }
-            }
-        }
-
-        return null;
+        return SliccPorts.resolve(varName, position, file).type();
     }
 
     @Nullable

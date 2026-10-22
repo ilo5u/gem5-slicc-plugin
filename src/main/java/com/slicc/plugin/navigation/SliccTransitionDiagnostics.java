@@ -166,20 +166,12 @@ public final class SliccTransitionDiagnostics {
         List<ASTNode> tokens = leaves(actions);
         if (tokens.size() < 2 || tokens.getFirst().getElementType() != SliccTokenTypes.OP_LBRACE
                 || tokens.getLast().getElementType() != SliccTokenTypes.OP_RBRACE) return null;
+        if (tokens.size() > 2 && names(actions).isEmpty()) return null;
         List<ASTNode> actionNames = new ArrayList<>();
-        boolean expectAction = true;
         for (int index = 1; index + 1 < tokens.size(); index++) {
             ASTNode token = tokens.get(index);
-            if (expectAction && token.getElementType() == SliccTokenTypes.IDENTIFIER) {
-                actionNames.add(token);
-                expectAction = false;
-            } else if (!expectAction && token.getElementType() == SliccTokenTypes.OP_SEMICOLON) {
-                expectAction = true;
-            } else {
-                return null;
-            }
+            if (token.getElementType() == SliccTokenTypes.IDENTIFIER) actionNames.add(token);
         }
-        if (!expectAction) return null;
         return new Header(stateNames, eventNames, List.copyOf(actionNames),
                 new TextRange(transition.getTextOffset(), closing.getTextRange().getEndOffset()));
     }
@@ -195,16 +187,17 @@ public final class SliccTransitionDiagnostics {
         boolean expectName = true;
         for (int index = 1; index + 1 < tokens.size(); index++) {
             ASTNode token = tokens.get(index);
-            if (expectName && token.getElementType() == SliccTokenTypes.IDENTIFIER) {
+            if (token.getElementType() == SliccTokenTypes.IDENTIFIER) {
                 names.add(token.getText());
                 expectName = false;
-            } else if (!expectName && token.getElementType() == SliccTokenTypes.OP_COMMA) {
+            } else if (!expectName && (token.getElementType() == SliccTokenTypes.OP_COMMA
+                    || token.getElementType() == SliccTokenTypes.OP_SEMICOLON)) {
                 expectName = true;
             } else {
                 return List.of();
             }
         }
-        return expectName ? List.of() : List.copyOf(names);
+        return List.copyOf(names);
     }
 
     private static List<ASTNode> leaves(ASTNode node) {

@@ -5,7 +5,10 @@ import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.project.IndexNotReadyException;
+import com.intellij.openapi.roots.ProjectFileIndex;
 import com.intellij.openapi.roots.ProjectRootModificationTracker;
+import com.intellij.openapi.roots.ProjectRootManager;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.ModificationTracker;
 import com.intellij.openapi.vfs.VfsUtilCore;
@@ -13,16 +16,15 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
+import com.intellij.psi.search.FilenameIndex;
+import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.CachedValue;
 import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
-import com.intellij.psi.util.PsiModificationTracker;
 
 import java.io.IOException;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -44,14 +46,14 @@ public final class SliccDebugFlags {
         }
     }
 
-    private record Root(VirtualFile directory) {}
+    private record Root(List<VirtualFile> directories, boolean indexed, boolean known) {}
     private record Index(Snapshot snapshot, List<Object> dependencies) {}
 
     private static final Snapshot UNAVAILABLE = new Snapshot(List.of(), false);
     private static final Key<CachedValue<Root>> ROOT_CACHE = Key.create("SLICC_DEBUG_FLAG_ROOT");
-    private static final Key<Map<VirtualFile, CachedValue<Snapshot>>> CACHE = Key.create("SLICC_DEBUG_FLAGS");
-    private static final Set<String> SKIPPED_DIRECTORIES = Set.of("build", "ext", "node_modules", "__pycache__");
-    private static final Set<String> CONFIG_INCLUDES = Set.of("source", "osource", "rsource", "orsource");
+    private static final Key<Map<Root, CachedValue<Snapshot>>> CACHE = Key.create("SLICC_DEBUG_FLAGS");
+    private static final Set<String> SKIPPED_DIRECTORIES = Set.of("build", "node_modules", "__pycache__");
+    private static final Set<String> SCRIPT_NAMES = Set.of("SConscript", "SConsopts");
     private static final Set<String> FLAG_CALLS = Set.of("DebugFlag", "CompoundFlag");
     private static final Set<String> ARGUMENT_ENDINGS = Set.of(",", ")");
 
@@ -73,12 +75,11 @@ public final class SliccDebugFlags {
         if (file == null) return UNAVAILABLE;
         PsiFile original = file.getOriginalFile();
         Root root = CachedValuesManager.getCachedValue(original, ROOT_CACHE, () ->
-                CachedValueProvider.Result.create(new Root(SliccRubyBuildScope.rootFor(original)),
+                CachedValueProvider.Result.create(findRoot(original),
                         VirtualFileManager.VFS_STRUCTURE_MODIFICATIONS,
-                        ProjectRootModificationTracker.getInstance(project),
-                        PsiModificationTracker.getInstance(project)));
-        if (root.directory() == null || !root.directory().isValid()) return UNAVAILABLE;
-        Map<VirtualFile, CachedValue<Snapshot>> cache = project.getUserData(CACHE);
+                        ProjectRootModificationTracker.getInstance(project)));
+        if (root.directories().isEmpty()) return UNAVAILABLE;
+        Map<Root, CachedValue<Snapshot>> cache = project.getUserData(CACHE);
         if (cache == null) {
             synchronized (project) {
                 cache = project.getUserData(CACHE);
@@ -88,11 +89,41 @@ public final class SliccDebugFlags {
                 }
             }
         }
-        return cache.computeIfAbsent(root.directory(), directory ->
-                CachedValuesManager.getManager(project).createCachedValue(() -> {
-                    Index index = new Builder(directory, project).build();
-                    return CachedValueProvider.Result.create(index.snapshot(), index.dependencies().toArray());
-                }, false)).getValue();
+        try {
+            return cache.computeIfAbsent(root, scope ->
+                    CachedValuesManager.getManager(project).createCachedValue(() -> {
+                        Index index = new Builder(scope, project).build();
+                        return CachedValueProvider.Result.create(index.snapshot(), index.dependencies().toArray());
+                    }, false)).getValue();
+        } catch (IndexNotReadyException exception) {
+            return UNAVAILABLE;
+        }
+    }
+
+    private static Root findRoot(PsiFile file) {
+        Project project = file.getProject();
+        ProjectRootManager manager = ProjectRootManager.getInstance(project);
+        if (manager != null) {
+            List<VirtualFile> roots = new ArrayList<>();
+            for (VirtualFile root : manager.getContentRoots()) {
+                if (root.isValid() && root.isDirectory()) roots.add(root);
+            }
+            if (!roots.isEmpty()) return new Root(List.copyOf(roots), true, true);
+        }
+        VirtualFile original = file.getVirtualFile();
+        if (original == null) return new Root(List.of(), false, false);
+        String basePath = project.getBasePath();
+        if (basePath != null) {
+            VirtualFile base = original.getFileSystem().findFileByPath(basePath.replace('\\', '/'));
+            if (base != null && base.isValid() && base.isDirectory()) {
+                return new Root(List.of(base), false, true);
+            }
+        }
+        for (VirtualFile directory = original.getParent(); directory != null; directory = directory.getParent()) {
+            if (directory.findChild("SConstruct") != null) return new Root(List.of(directory), false, true);
+        }
+        VirtualFile directory = original.getParent();
+        return new Root(directory == null ? List.of() : List.of(directory), false, false);
     }
 
     static Snapshot parse(String source, VirtualFile file) {
@@ -120,43 +151,41 @@ public final class SliccDebugFlags {
     }
 
     private static final class Builder {
-        private final VirtualFile root;
+        private final Root root;
+        private final Project project;
+        private final ProjectFileIndex fileIndex;
         private final Map<String, Flag> flags = new LinkedHashMap<>();
         private final List<Object> dependencies = new ArrayList<>();
         private final Set<VirtualFile> scripts = new LinkedHashSet<>();
         private final Set<VirtualFile> visitedDirectories = new HashSet<>();
         private final Set<VirtualFile> readFiles = new HashSet<>();
-        private boolean available = true;
+        private boolean available;
 
-        private Builder(VirtualFile root, Project project) {
+        private Builder(Root root, Project project) {
             this.root = root;
+            this.project = project;
+            ProjectRootManager manager = ProjectRootManager.getInstance(project);
+            this.fileIndex = manager == null ? null : manager.getFileIndex();
+            this.available = root.known();
             dependencies.add(VirtualFileManager.VFS_STRUCTURE_MODIFICATIONS);
             dependencies.add(ProjectRootModificationTracker.getInstance(project));
+            dependencies.add(DumbService.getInstance(project).getModificationTracker());
         }
 
         private Index build() {
-            collectScripts(root);
-            Deque<VirtualFile> configs = new ArrayDeque<>();
-            Set<VirtualFile> visitedConfigs = new HashSet<>();
-            VirtualFile config = root.findChild("Kconfig");
-            if (config != null) configs.add(config);
-            while (!configs.isEmpty()) {
-                ProgressManager.checkCanceled();
-                VirtualFile current = configs.removeFirst();
-                if (!visitedConfigs.add(current)) continue;
-                collectScripts(current.getParent());
-                List<SliccSourceTokens.Token> tokens = SliccSourceTokens.read(readText(current), true);
-                for (int index = 0; index + 1 < tokens.size(); index++) {
-                    SliccSourceTokens.Token token = tokens.get(index);
-                    if (token.literal() || !CONFIG_INCLUDES.contains(token.text()) || !tokens.get(index + 1).literal()) continue;
-                    VirtualFile base = token.text().endsWith("rsource") ? current.getParent() : sourceRoot();
-                    String path = tokens.get(index + 1).text();
-                    VirtualFile included = base.findFileByRelativePath(path);
-                    if (included != null && !included.isDirectory()) configs.add(included);
-                    else if (!token.text().startsWith("o")) available = false;
+            if (root.indexed()) {
+                GlobalSearchScope scope = GlobalSearchScope.projectScope(project);
+                for (String name : SCRIPT_NAMES) {
+                    ProgressManager.checkCanceled();
+                    scripts.addAll(FilenameIndex.getVirtualFilesByName(name, scope));
                 }
+            } else {
+                for (VirtualFile directory : root.directories()) collectScripts(directory);
             }
-            for (VirtualFile script : scripts) {
+            if (scripts.isEmpty()) available = false;
+            List<VirtualFile> sortedScripts = new ArrayList<>(scripts);
+            sortedScripts.sort(Comparator.comparing(VirtualFile::getPath));
+            for (VirtualFile script : sortedScripts) {
                 Snapshot parsed = parse(readText(script), script);
                 available &= parsed.sourceAvailable();
                 for (Flag flag : parsed.flags()) flags.putIfAbsent(flag.name(), flag);
@@ -164,27 +193,17 @@ public final class SliccDebugFlags {
             return new Index(new Snapshot(List.copyOf(flags.values()), available), List.copyOf(dependencies));
         }
 
-        private VirtualFile sourceRoot() {
-            VirtualFile parent = root.getParent();
-            if (parent != null && parent.getName().equals("mem") && parent.getParent() != null
-                    && parent.getParent().getName().equals("src") && parent.getParent().getParent() != null) {
-                return parent.getParent().getParent();
-            }
-            for (VirtualFile directory = root; directory != null; directory = directory.getParent()) {
-                if (directory.findChild("SConstruct") != null) return directory;
-            }
-            return root;
-        }
-
         private void collectScripts(VirtualFile directory) {
             ProgressManager.checkCanceled();
             if (directory == null || !directory.isDirectory() || !visitedDirectories.add(directory)) return;
+            if (fileIndex != null && (fileIndex.isExcluded(directory) || fileIndex.isUnderIgnored(directory))) return;
             List<VirtualFile> children = new ArrayList<>(List.of(directory.getChildren()));
             children.sort(Comparator.comparing(VirtualFile::getName));
             for (VirtualFile child : children) {
                 if (child.isDirectory()) {
                     if (!child.getName().startsWith(".") && !SKIPPED_DIRECTORIES.contains(child.getName())) collectScripts(child);
-                } else if (child.getName().equals("SConscript") || child.getName().equals("SConsopts")) scripts.add(child);
+                } else if (SCRIPT_NAMES.contains(child.getName())
+                        && (fileIndex == null || !fileIndex.isExcluded(child) && !fileIndex.isUnderIgnored(child))) scripts.add(child);
             }
         }
 

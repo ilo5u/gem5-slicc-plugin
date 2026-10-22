@@ -5,22 +5,22 @@
 Language support for `.sm` and `.slicc` files used in the
 [gem5](https://www.gem5.org) Ruby memory-subsystem cache coherence framework.
 
-Version **1.4.0** — **2026-10-21**. See [CHANGELOG.md](CHANGELOG.md) for the release notes.
+Version **1.5.0** — **2026-10-22**. See [CHANGELOG.md](CHANGELOG.md) for the release notes.
 
 ## How to Use
 
 1. **Install the plugin in CLion.** Follow the [installation instructions](#installing-in-clion--intellij-idea), then wait for project indexing to finish after opening a project.
 2. **Try the bundled gem5 Ruby sources.** This repository's [`ruby/`](ruby/) folder contains the main gem5 Ruby code, including SLICC protocols and related C++ implementations. Use **File → Open** in CLion to open that folder as a project. Open a protocol file such as [`MI_example-cache.sm`](ruby/protocol/MI_example-cache.sm) to try highlighting, completion, inlay hints, and `Ctrl+Click` / `Ctrl+B` navigation.
 3. **For gem5 development, open the full gem5 repository root.** Prefer opening the gem5 root as the CLion project rather than only `src/mem/ruby` or an individual protocol directory. This keeps C++ sources, `.sm` / `.slicc` files, and headers outside the Ruby subtree available together for indexing and cross-file navigation. The bundled `ruby/` folder is useful for a quick preview; resolving dependencies outside that copied subtree requires a full gem5 checkout.
-4. **Explore descriptions and diagnostics.** Hover a declaration or resolved usage, or press `Ctrl+Q`, to read its `desc`. In actions, try `DPRINTF(` for Ruby debug-flag completion; literal format argument counts and definite transition/function-name errors are checked while editing.
+4. **Explore descriptions and diagnostics.** Hover a declaration or resolved usage, or press `Ctrl+Q`, to read its `desc`. In actions, try `DPRINTF(` for project-wide debug-flag completion; literal format argument-count mismatches produce warnings, while definite flag, transition, and function-name problems remain errors.
 
 ## Documentation
 
-Marketplace description, features, and 1.4.0 What's New are available in [MARKETPLACE.html](MARKETPLACE.html).
+Marketplace description, features, and 1.5.0 What's New are available in [MARKETPLACE.html](MARKETPLACE.html).
 The standalone Markdown description is available in [DESCRIPTION.md](DESCRIPTION.md).
 The HTML onboarding guide is available in [GET_STARTED.html](GET_STARTED.html).
 
-The product description and 1.4.0 release notes are also synchronized into
+The product description and 1.5.0 release notes are also synchronized into
 `src/main/resources/META-INF/plugin.xml` (`<description>` and `<change-notes>`).
 Keep these copies aligned when editing the Marketplace HTML. Marketplace normally
 uses the uploaded plugin's metadata; if you have selected a permanent page-level
@@ -33,22 +33,25 @@ description override, change that setting to use `plugin.xml` again. See the
 
 | Feature | Detail |
 |---------|--------|
-| **Syntax highlighting** | Declaration keywords (`machine`, `structure`, `action`, `transition`, …), control flow, type keywords, built-in SLICC statements (`peek`, `enqueue`, `dequeue`, `trigger`, `stall_and_wait`, `new`, `isReady`, …), attribute keywords, comments, strings, numbers |
+| **Syntax highlighting** | Declaration keywords (`machine`, `structure`, `action`, `transition`, …), control flow, type keywords, built-in SLICC statements (`peek`, `enqueue`, `trigger`, `stall_and_wait`, `new`, …), attribute keywords, comments, strings, numbers |
 | **Semantic highlighting** | Machine / structure / enumeration names highlighted as class names; action / function names as function declarations; enum members as constants; structure fields as instance fields; implicit variables (`tbe`, `cache_entry`, `address`) as predefined symbols |
 | **File and symbol icons** | Rounded-square `SM` and `H` icons distinguish `.sm` and `.slicc` files; lettered circular badges identify actions, enumerations, functions, machines, structures, and transitions. Light/dark variants share font-independent outlined lettering |
-| **Additional attributes and built-ins** | Highlight/complete `block_on` and `format` like `main` / `desc`, and parse/highlight/complete `DPRINTF`, `DPRINTFN`, and `APPEND_TRANSITION_COMMENT` without changing the 30-word reserved list |
-| **Ruby debug flags and format counts** | Complete `DPRINTF`'s first argument from literal `DebugFlag` / `CompoundFlag` declarations in related build sources; report missing and definitely unknown flags. Check literal `DPRINTF` / `DPRINTFN` argument counts, including `%%`, star width/precision, and nested calls, not argument types |
+| **Additional attributes and built-ins** | Highlight/complete `block_on`, `format`, `wake_up`, `rsc_stall_handler`, `prot_stall_handler`, `return_by_ref`, and `return_by_pointer` like `main` / `desc`, and parse/highlight/complete `DPRINTF`, `DPRINTFN`, `APPEND_TRANSITION_COMMENT`, and `stallPort` without changing the 30-word reserved list |
+| **Debug flags and format counts** | Complete `DPRINTF`'s first argument from literal `DebugFlag` / `CompoundFlag` declarations in all gem5/project `SConscript` files; missing/definitely unknown flags and missing format strings are errors. Warn on literal `DPRINTF` / `DPRINTFN` argument-count mismatches, including `%%`, star width/precision, and nested calls, without checking argument types |
 | **Transition and call diagnostics** | Report missing actions, later duplicate state/event transition pairs in include order, and missing visible free/scoped function names. Preserve machine scope and do not confuse overload argument mismatches with missing functions |
 | **Description documentation** | Hover or `Ctrl+Q` on declarations or resolved usages to display `desc`, including structures, fields, enums/constants, functions, and actions; matching function declarations/definitions can share a description |
 | **Go-to-Declaration** | `Ctrl+Click` (or `Ctrl+B`) on any identifier jumps to its definition, with block-scoped variables, parameter/local shadowing, and overload-aware resolution for functions |
 | **Implicit action variable navigation** | `Ctrl+Click` / `Ctrl+B` on implicit `cache_entry` opens the machine's primary `AbstractCacheEntry` implementation (such as `Entry` or CHI's `CacheEntry`); `main="false"` excludes non-default entries, while omitted `main` defaults to true. Implicit `tbe` opens `TBE`. Explicit parameters and local variables take priority; missing or ambiguous types do not select unrelated declarations |
-| **External SLICC types → C++ definitions** | `Ctrl+Click` / `Ctrl+B` on a `structure` name marked `external="yes"`, or an `external_type` declaration name, opens matching reachable gem5 C++ type definitions or supported aliases. Match namespaces and `external_name`, follow literal `Source` / `MakeInclude` entries and transitive includes, and keep unrelated Ruby roots separate. Missing definitions are errors; unavailable source context produces warnings |
+| **External SLICC types → C++ definitions** | `Ctrl+Click` / `Ctrl+B` on a `structure` name marked `external="yes"`, or an `external_type` declaration name, opens matching reachable gem5 C++ type definitions or supported aliases. Machine-owned unqualified names prefer `gem5::ruby::<protocol>::Name`, then `gem5::ruby::Name`, without searching other protocols. Keep qualified `external_name` values exact, follow literal `Source` / `MakeInclude` entries and transitive includes, and keep unrelated Ruby roots separate. Missing definitions are errors; unavailable source context produces warnings |
 | **Action → transitions** | `Ctrl+Click` / `Ctrl+B` on an action declaration name jumps to its sole referencing transition, or opens a chooser showing transition headers and files when there are multiple matches |
 | **Structure fields / enum constants → usages** | `Ctrl+Click` / `Ctrl+B` on a structure field or enumeration constant declaration finds its actual usage statements, including reads, writes, initializers, and state/event references in transitions. Jump directly for one statement or choose among multiple statements with file/line context; preserve receiver type, inheritance, shadowing, and machine/include ownership |
+| **Enumeration default navigation** | Resolve non-string `EnumName_MemberName` defaults to the visible enumeration member, respecting the declared enum type, ownership, and unambiguous underscore matching |
+| **Generated enum/state helpers** | Recognise global `EnumName_to_string`, machine-local `MachineName_EnumName_to_string`, and state helpers such as `L1Cache_State_to_permission`. Follow gem5's generated type identifier, including external/primitive type names or `external_name`; use function-call highlighting and declaration navigation while preserving explicit functions/variables and scope |
 | **Function navigation** | Calls and separate declarations jump to the matching definition; clicking a definition name, or a declaration with no SLICC definition (including structure/external-type methods), lists concrete calling statements in functions/actions and navigates to the call's line. One statement jumps directly; multiple statements open a chooser with file/line locations. Multiline statements display on one line, capped at 160 characters with an ellipsis; override using the IDE VM option `-Dslicc.navigation.maxStatementLength=240`. Match parameter signatures and machine/include/type scopes; calls to declaration-only functions still navigate to the declaration |
 | **Go to Symbol** | `Ctrl+Alt+Shift+N` to search for any action, function, machine, or type by name |
 | **Find Usages** | `Alt+F7` on any named declaration finds its reference sites, distinguishing same-named fields, local variables, and resolved function overloads |
 | **Auto-completion** | All SLICC keywords, gem5 built-in types, file-local symbols, and free functions visible through includes, protocol files, and global declarations. Function candidates show return types and parameter signatures; dot-triggered member completion (`tbe.`, `in_msg.`, `someVar.`) shows fields and functions of the resolved type |
+| **Declaration-driven port methods** | `in_port` names have type `InPort` and `out_port` names have type `OutPort`, not the second message-type argument. Visible SLICC declarations drive member completion, navigation, parameter information, return-type inference, and member checks. `isReady` and `dequeue` are ordinary method/function identifiers, not keywords or built-ins; preserve scopes and explicit variable shadowing |
 | **Parameter info** | `Ctrl+P` (or auto-popup on `(`) shows all overloads of a function with parameter types; current argument position is highlighted |
 | **Parameter name inlay hints** | Show parameter names before arguments of resolved free-function and member-function calls. Suppress unnamed parameters, arguments with the same name, and conflicting names from ambiguous overloads |
 | **Implicit type inlay hints** | Show the inferred type at the first actual use of each scoped `in_msg`, `out_msg`, `tbe`, `cache_entry`, or `address` binding, without repeating explicit variable declarations |
@@ -73,6 +76,19 @@ Ruby are needed. On an external declaration such as `MessageBuffer` or
 `CacheMemory` in `RubySlicc_Types.sm`, use `Ctrl+B` to open the C++ definition.
 Ordinary SLICC type usages still resolve to their SLICC declarations.
 
+For a machine or its included declarations, unqualified external names first use
+the owning protocol namespace, then the shared `gem5::ruby` namespace. For example,
+CHI's `MN_TBEStorage` resolves to `gem5::ruby::CHI::MN_TBEStorage`, not another
+protocol's same-named type. Protocol ownership follows the `.slicc` declaration and
+literal includes, using `RUBY_PROTOCOL_<name>` Kconfig entries and their optional
+`bool` prompt aliases; prompt whitespace is normalised to underscores. Unknown or
+ambiguous protocol ownership does not trigger a search through other namespaces.
+Only includes issued inside a machine inherit machine ownership; globals and
+includes outside the machine retain shared-Ruby-first lookup, even in the same
+file. If machine protocol ownership is unknown or ambiguous and no shared match
+exists, report unavailable context as a warning rather than claiming the C++
+definition is definitely missing.
+
 Lookup is a conservative source-based graph of supported literal
 `Source` / `MakeInclude` / include paths, including conditional branches together.
 It does not execute Kconfig/SCons or preprocess C++; computed paths and
@@ -83,7 +99,7 @@ file tree, namespace/alias rules, exemptions, and diagnostic boundaries.
 ### Inlay Hints
 
 Parameter names and implicit types are independently switchable under
-**Settings → Editor → Inlay Hints → SLICC** in version 1.4.0.
+**Settings → Editor → Inlay Hints → SLICC** in version 1.5.0.
 
 Parameter names follow resolved function signatures and machine/include/member
 scopes. When overload resolution is ambiguous, a hint is shown only where the
@@ -152,7 +168,7 @@ conversions. Existing member-name checking remains separate.
 
 ## Supported Reserved Words
 
-Version 1.4.0 includes highlighting and completion for all 30 words in the gem5
+Version 1.5.0 includes highlighting and completion for all 30 words in the gem5
 SLICC reserved-word list. Keywords are case-sensitive, including uppercase `OOD`.
 
 ```text
@@ -163,20 +179,27 @@ check_stop_slots check_on_cache_probe static_cast
 if is_valid is_invalid else return void new OOD defer_enqueueing
 ```
 
-`in_trans`, `out_trans`, `main`, `block_on`, and `format` are also recognised as
-attribute keywords alongside `interface` and `desc`. `DPRINTF`, `DPRINTFN`, and
-`APPEND_TRANSITION_COMMENT` are recognised built-in calls, not additions to the
+`in_trans`, `out_trans`, `main`, `block_on`, `format`, `wake_up`,
+`rsc_stall_handler`, `prot_stall_handler`, `return_by_ref`, and `return_by_pointer` are also recognised as
+attribute keywords alongside `interface` and `desc`. `DPRINTF`, `DPRINTFN`,
+`APPEND_TRANSITION_COMMENT`, and `stallPort` are recognised built-in calls, not additions to the
 30-word reserved list. Existing additional SLICC keywords and built-ins remain supported.
+`isReady` and `dequeue` are ordinary identifiers resolved through visible method
+or function declarations, not special keywords or built-in calls.
 
 ### Debug Flags and Format Strings
 
 In `DPRINTF(RubySlicc, "address=%#x count=%d", address, count)`, the first argument
 is a debug flag, followed by the format string and values. Completion reads
-literal `DebugFlag` / `CompoundFlag` declarations from related Ruby build sources.
+literal `DebugFlag` / `CompoundFlag` declarations from all `SConscript` files in
+the gem5 checkout or current project, including non-Ruby flags such as `HtmMem`
+from `src/mem/SConscript`.
 A missing flag is an error; unavailable or incomplete source context defers
 unknown-flag errors. `DPRINTFN("count=%d", count)` has no flag argument.
 
-Literal-format diagnostics compare argument counts, not types. `%%` consumes no
+Literal-format count mismatches in `DPRINTF` / `DPRINTFN` are warnings, not errors;
+flag diagnostics and missing format strings remain errors. These checks compare
+argument counts, not types. `%%` consumes no
 argument; in `%*.*f`, width, precision, and value each consume one. Nested function
 commas do not split outer arguments. Dynamic or unsupported formats and incomplete
 calls defer the count check; these checks do not execute SCons or preprocess C++.
@@ -184,7 +207,9 @@ calls defer the count check; these checks do not execute SCons or preprocess C++
 ### Transition, Function, and Description Assistance
 
 Transition checks resolve action names and expand state/event sets to detect later
-duplicate pairs in machine/include order. Missing-function diagnostics check
+duplicate pairs in machine/include order. State/event lists accept whitespace,
+comma, and semicolon separators; the third next-state argument may be `*` without
+disabling those checks. Missing-function diagnostics check
 visible free and supported scoped names, not full overload argument compatibility.
 Dot-member name diagnostics remain separate. Ambiguous or incomplete scopes,
 unknown receivers, and indexing defer the corresponding checks rather than guessing.
@@ -261,7 +286,7 @@ If Gradle cannot find the Java toolchain required by that IDE, point
 ```bash
 # Build the distributable plugin ZIP
 ./gradlew buildPlugin
-# Output: build/distributions/slicc-plugin-1.4.0.zip
+# Output: build/distributions/slicc-plugin-1.5.0.zip
 
 # Launch a sandboxed IDE with the plugin loaded (primary way to test)
 ./gradlew runIde
@@ -272,7 +297,7 @@ If Gradle cannot find the Java toolchain required by that IDE, point
 ## Installing in CLion / IntelliJ IDEA
 
 1. Go to **Settings → Plugins → ⚙ → Install Plugin from Disk…**
-2. Select `build/distributions/slicc-plugin-1.4.0.zip`
+2. Select `build/distributions/slicc-plugin-1.5.0.zip`
 3. Restart the IDE
 4. Open any `.sm` or `.slicc` file — highlighting activates immediately
 

@@ -421,6 +421,8 @@ public final class SliccExpressionTypes {
                 }
                 return new Value(SliccPsiUtil.typeText(variable.getNode().findChildByType(SliccTypes.TYPE_REF)), false);
             }
+            SliccPorts.Binding port = SliccPorts.resolve(name, position);
+            if (port.knownName()) return new Value(port.type(), false);
             String implicitType = SliccGotoDeclarationHandler.resolveImplicitVariableType(name, position);
             if (implicitType != null) return new Value(implicitType, false);
             SliccEnumMember member = SliccMemberNavigation.resolveConstant(null, name, position);
@@ -442,6 +444,7 @@ public final class SliccExpressionTypes {
             for (SliccFieldDecl variable : SliccGotoDeclarationHandler.collectVisibleVariables(position)) {
                 if (name.equals(variable.getName())) return List.of();
             }
+            if (SliccPorts.resolve(name, position).knownName()) return List.of();
             PsiElement owner = PsiTreeUtil.getParentOfType(position, SliccStructureDecl.class, SliccExternalTypeDecl.class);
             if (owner instanceof SliccNamedElement type && type.getName() != null) {
                 List<SliccFunctionDecl> methods = memberCandidates(type.getName(), name);

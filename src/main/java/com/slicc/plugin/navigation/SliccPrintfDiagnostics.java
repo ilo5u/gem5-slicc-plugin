@@ -1,6 +1,7 @@
 package com.slicc.plugin.navigation;
 
 import com.intellij.lang.ASTNode;
+import com.intellij.lang.annotation.HighlightSeverity;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.util.TextRange;
@@ -18,7 +19,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class SliccPrintfDiagnostics {
-    public record Diagnostic(@NotNull TextRange range, @NotNull String message) {}
+    public record Diagnostic(@NotNull TextRange range, @NotNull String message, @NotNull HighlightSeverity severity) {
+        public Diagnostic(@NotNull TextRange range, @NotNull String message) {
+            this(range, message, HighlightSeverity.ERROR);
+        }
+    }
 
     private record Argument(List<ASTNode> tokens) {
         private TextRange range() {
@@ -83,7 +88,7 @@ public final class SliccPrintfDiagnostics {
         int actual = arguments.size() - formatIndex - 1;
         if (expected != actual) {
             diagnostics.add(new Diagnostic(format.range(), name.getText() + " format expects " + expected
-                    + " argument(s), but " + actual + " provided"));
+                    + " argument(s), but " + actual + " provided", HighlightSeverity.WARNING));
         }
         return List.copyOf(diagnostics);
     }

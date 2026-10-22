@@ -35,9 +35,13 @@ public class SliccParameterInfoHandler implements ParameterInfoHandler<PsiElemen
         System.err.println("[SLICC-PI] funcName=" + funcName + " ownerType=" + ownerType);
         if (funcName == null) return null;
 
+        PsiElement callName = findCallNameElement(lparen);
+        com.intellij.lang.ASTNode previous = callName == null ? null
+                : SliccPsiUtil.previousSignificantSibling(callName.getNode());
+        boolean member = previous != null && previous.getElementType() == SliccTokenTypes.OP_DOT;
         List<SliccFunctionDecl> overloads = ownerType != null
-                ? SliccGotoDeclarationHandler.collectMemberFunctionOverloads(ownerType, funcName, context.getFile())
-                : SliccGotoDeclarationHandler.collectFunctionOverloads(funcName, context.getFile());
+                ? SliccGotoDeclarationHandler.collectMemberFunctionOverloadsInContext(ownerType, funcName, callName)
+                : member ? List.of() : SliccGotoDeclarationHandler.collectFunctionOverloads(funcName, context.getFile());
         System.err.println("[SLICC-PI] overloads.size=" + overloads.size());
         if (overloads.isEmpty()) return null;
 
@@ -114,39 +118,26 @@ public class SliccParameterInfoHandler implements ParameterInfoHandler<PsiElemen
 
     @Nullable
     private static String findCallName(@NotNull PsiElement lparen) {
-        PsiElement prev = PsiTreeUtil.prevLeaf(lparen);
-        while (prev != null && prev.getNode() != null
-                && prev.getNode().getElementType() == com.intellij.psi.TokenType.WHITE_SPACE)
-            prev = PsiTreeUtil.prevLeaf(prev);
-        if (prev == null || prev.getNode() == null) return null;
-        if (prev.getNode().getElementType() != SliccTokenTypes.IDENTIFIER) return null;
-        return prev.getText();
+        PsiElement identifier = findCallNameElement(lparen);
+        return identifier == null ? null : identifier.getText();
+    }
+
+    @Nullable
+    private static PsiElement findCallNameElement(PsiElement lparen) {
+        com.intellij.lang.ASTNode name = SliccPsiUtil.previousSignificantSibling(lparen.getNode());
+        return name != null && name.getElementType() == SliccTokenTypes.IDENTIFIER ? name.getPsi() : null;
     }
 
     /** If the call is owner.func(, resolve owner's type; otherwise null. */
     @Nullable
     private static String resolveDotOwner(@NotNull PsiElement lparen, @NotNull PsiFile file) {
-        PsiElement funcName = PsiTreeUtil.prevLeaf(lparen);
-        while (funcName != null && funcName.getNode() != null
-                && funcName.getNode().getElementType() == com.intellij.psi.TokenType.WHITE_SPACE)
-            funcName = PsiTreeUtil.prevLeaf(funcName);
+        PsiElement funcName = findCallNameElement(lparen);
         if (funcName == null) return null;
-
-        PsiElement dot = PsiTreeUtil.prevLeaf(funcName);
-        while (dot != null && dot.getNode() != null
-                && dot.getNode().getElementType() == com.intellij.psi.TokenType.WHITE_SPACE)
-            dot = PsiTreeUtil.prevLeaf(dot);
-        if (dot == null || dot.getNode() == null
-                || dot.getNode().getElementType() != SliccTokenTypes.OP_DOT) return null;
-
-        PsiElement owner = PsiTreeUtil.prevLeaf(dot);
-        while (owner != null && owner.getNode() != null
-                && owner.getNode().getElementType() == com.intellij.psi.TokenType.WHITE_SPACE)
-            owner = PsiTreeUtil.prevLeaf(owner);
-        if (owner == null || owner.getNode() == null
-                || owner.getNode().getElementType() != SliccTokenTypes.IDENTIFIER) return null;
-
-        return SliccGotoDeclarationHandler.resolveOwnerTypeForCompletion(owner.getNode(), owner, file);
+        com.intellij.lang.ASTNode dot = SliccPsiUtil.previousSignificantSibling(funcName.getNode());
+        if (dot == null || dot.getElementType() != SliccTokenTypes.OP_DOT) return null;
+        com.intellij.lang.ASTNode owner = SliccPsiUtil.previousSignificantSibling(dot);
+        if (owner == null || owner.getElementType() != SliccTokenTypes.IDENTIFIER) return null;
+        return SliccGotoDeclarationHandler.resolveOwnerTypeForCompletion(owner, funcName, file);
     }
 
     private static int countCommasBetween(int start, int end, @NotNull PsiFile file) {
