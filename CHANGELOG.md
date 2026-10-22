@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Documentation
+
+- Add matching English and Simplified Chinese README acknowledgements for Codex, noting the author's GPT-6.1 Sol (Ultra) model configuration.
+
 ## 1.5.0 — 2026-10-22
 
 This release combines all changes prepared on 2026-10-22: transition parsing and

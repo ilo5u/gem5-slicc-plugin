@@ -395,6 +395,13 @@ When reporting a bug, please include:
 
 ---
 
+## Acknowledgements
+
+Thanks to **Codex** for its assistance with this plugin's development.
+The model configuration used was **GPT-6.1 Sol (Ultra)**.
+
+---
+
 ## License
 
 This project is licensed under the [Apache License 2.0](LICENSE).

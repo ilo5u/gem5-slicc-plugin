@@ -377,6 +377,13 @@ slicc-plugin/
 
 ---
 
+## 致谢
+
+感谢 **Codex** 对本插件开发工作的帮助。
+使用的模型配置为 **GPT-6.1 Sol（Ultra）**。
+
+---
+
 ## 许可证
 
 本项目采用 [Apache License 2.0](LICENSE) 许可证。
