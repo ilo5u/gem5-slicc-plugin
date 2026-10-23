@@ -12,7 +12,7 @@ This file provides guidance to coding agents working in this repository. It appl
 ```bash
 # Build the plugin zip
 ./gradlew buildPlugin
-# Output: build/distributions/slicc-plugin-1.5.0.zip
+# Output: build/distributions/slicc-plugin-1.6.0.zip
 # The version is defined in build.gradle.kts.
 
 # Launch sandboxed IDE with plugin loaded (primary way to test)
@@ -25,21 +25,22 @@ There is no automated test suite (`src/test/` is absent). Test manually using re
 
 ## Release Tracking
 
-The current release version is **1.5.0**, prepared on **2026-10-22**. This release
-combines legal transition-list and wildcard handling, recovery after malformed
-action blocks, correct transition resource/action separation, protocol-scoped
-external C++ navigation, additional port/qualifier attributes and `stallPort`,
-project-wide debug flags, enumeration-default navigation, generated enum/state
-helper resolution, and declaration-driven `InPort` / `OutPort` methods. Its
-changes and validation are recorded in the
-dated section of `CHANGELOG.md`; preserve the existing 1.4.0 and earlier history.
+The current release version is **1.6.0**, prepared on **2026-10-23**. This release
+fixes reverse usage navigation from machine member-variable declarations within
+the owning machine's include closure, preserving semantic declaration identity,
+shadowing, and statement deduplication. It also adds the shared plugin logo,
+vendor `ilo5u` and contact email
+`chengxin201@mails.ucas.ac.cn`, synchronized English and Simplified Chinese
+README guides with the companion VS Code link, and Codex/model acknowledgements
+in the README and synchronized product descriptions. Its changes and validation are recorded in the
+dated section of `CHANGELOG.md`; preserve the existing 1.5.0 and earlier history.
 Record subsequent changes in a new unreleased section unless the user explicitly
 authorizes another same-version refresh. Keep the
 user-facing notes in `MARKETPLACE.html` synchronized with
 the `<change-notes>` section of `src/main/resources/META-INF/plugin.xml`, preserving
-previous release entries. The 1.5.0 user-facing release notes are synchronized.
-Keep the Marketplace short-description paragraph and Description/Features/Current
-Limitations sections synchronized with `<description>` too; do not include What's
+previous release entries. The 1.6.0 user-facing release notes are synchronized.
+Keep the Marketplace short-description paragraph and Description/Features/
+Acknowledgements/Current Limitations sections synchronized with `<description>` too; do not include What's
 New there. Keep `DESCRIPTION.md`, the standalone Markdown version of the product
 description, aligned with the same content. `GET_STARTED.html` is the separate
 Marketplace onboarding guide.
@@ -89,7 +90,7 @@ Source file → Lexer → Parser → PSI Tree → Annotator / Reference / Comple
    - `SliccExpressionTypes` — Conservative scope-aware expression model for function-result diagnostics. A `Session` infers supported simple variables, fields, free/member/scoped calls, nested calls, parentheses, and supported literals. Select overload candidates by argument compatibility, never the assignment target's desired return type. Compare nominal SLICC base types and supported `interface` relationships; reference/pointer call qualifiers are not C++ conversion rules, `primitive="yes"` does not make every external type numeric, and `external_name` does not merge distinct SLICC declarations. Unknown types/arguments, ambiguous owners/types, conflicting overloads, incomplete declarations, complex operators, indexed expressions, and indexing defer diagnostics rather than causing cascades. Reuse per-session resolution state and preserve cancellation; do not fall back to unrelated project-wide names.
    - `SliccTypeDiagnostics` — Reports definite mismatches for function-result assignments/initializers and function results passed to other calls, including invalid use of `void` results. Track call-containing expressions rather than validating every raw argument or function-body `return` statement. Underline the result expression or offending inner-call argument. Preserve gem5 assignment-only legacy exemptions for expected `NetDest`, actual `Set`, and the inverse interface relationship; do not apply those exemptions to function arguments or add blanket numeric/C++ implicit conversions. Keep this check separate from `SliccMemberDiagnostics`, whose dot-RHS check remains name-only.
    - `SliccExternalTypeNavigation` — handles declaration-name UI navigation from `structure(..., external="yes")` and `external_type` to reachable C++ type definitions or supported aliases. Machine-owned unqualified names prefer `gem5::ruby::<protocol>::Name`, then `gem5::ruby::Name`; never scan other protocol namespaces. Applies exact qualified `external_name`, the `gem5` fallback for `external_type`, template-base lookup, standard scalar/std/Scalar exemptions, and `InPort`/`OutPort` mapping to `MessageBuffer`. `SliccRubyProtocols` separately caches protocol ownership from Kconfig `RUBY_PROTOCOL_*` suffixes, normalised `bool` prompt aliases, `.slicc` protocol literals, and transitive literal includes; unknown or ambiguous ownership must not guess a protocol. `SliccRubyBuildScope` locates the related Ruby Kconfig/SConscript root, collects supported literal `Source`/`MakeInclude`/`SLICC_INCLUDES` entries and transitive C++ includes, maps generated protocol headers back to their sources, and caches source/document dependencies. Keep the lightweight protocol graph separate so ordinary SLICC edits do not rebuild the C++ source graph. `SliccCppTypes` recognizes supported source-level type/alias definitions; `SliccCppTypeTarget` preserves source offsets for navigation. Missing definitions produce errors; unavailable source context produces warnings, while indexing defers lookup. Semantic SLICC references still resolve to SLICC declarations. The static graph unions conditional branches without executing Kconfig/SCons or preprocessing C++; computed paths, macro-generated definitions, and C++ member/call navigation are not implemented. See [RUBY_CPP_INTEGRATION.md](RUBY_CPP_INTEGRATION.md) for the inspected file tree and analysis boundaries.
-   - `SliccMemberNavigation` — reverses structure-field and enum/state-constant declaration navigation into actual usage statements, deduplicated per statement and filtered by semantic PSI identity. Uses the shared cached `SliccFunctionNavigation.Scope` for type/machine/include ownership, direct field lookup, supported interface inheritance, and qualified enum resolution. Transition state/event references use their respective `State`/`Event` types; ambiguous unqualified constants are not guessed. `SliccUsageSite` is shared by function calls and member usages, preserving smart pointers, multiline previews, configurable truncation, and actual identifier offsets. The semantic resolver still maps references to declarations, never to usage-site UI targets.
+   - `SliccMemberNavigation` — reverses machine-field, structure-field, and enum/state-constant declaration navigation into actual usage statements, deduplicated per statement and filtered by semantic PSI identity. Machine fields include references in functions/actions within the owning machine's include closure, respecting parameter/local shadowing and keeping unrelated machines separate. Uses the shared cached `SliccFunctionNavigation.Scope` for type/machine/include ownership, direct field lookup, supported interface inheritance, and qualified enum resolution. Transition state/event references use their respective `State`/`Event` types; ambiguous unqualified constants are not guessed. `SliccUsageSite` is shared by function calls and member usages, preserving smart pointers, multiline previews, configurable truncation, and actual identifier offsets. The semantic resolver still maps references to declarations, never to usage-site UI targets.
    - `SliccGotoSymbolContributor` — Ctrl+Alt+Shift+N symbol search
    - `SliccStructureViewFactory` — Alt+7 structure tree (machine → in_ports, out_ports, actions, transitions, functions). Uses plugin-owned tree elements implementing the public structure-view interfaces with smart PSI pointers, avoiding the implementation base class unavailable in 2026.2.
 

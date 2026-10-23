@@ -1,10 +1,24 @@
 # Changelog
 
-## Unreleased
+## 1.6.0 — 2026-10-23
+
+### Fixed
+
+- Enable reverse usage navigation for machine member variables, including CHI's `directory`. Collect concrete references from the same machine and its transitive includes, preserving resolved declaration identity, parameter/local shadowing, machine ownership, and statement-level deduplication. Keep semantic references pointing to declarations and retain existing structure-field and enum navigation.
+
+### Changed
+
+- Add the shared SLICC circular gradient logo as the plugin's scalable Marketplace/Plugin Manager icon, preserving the existing file and symbol icons. Set the plugin vendor to `ilo5u`, use `chengxin201@mails.ucas.ac.cn` as the contact email, link to the author's GitHub profile, and remove the previous gem5 Community contact metadata.
 
 ### Documentation
 
-- Add matching English and Simplified Chinese README acknowledgements for Codex, noting the author's GPT-6.1 Sol (Ultra) model configuration.
+- Provide matching English and Simplified Chinese READMEs with language-switch links and a link to the companion VS Code extension.
+- Add matching README and product-description acknowledgements for Codex, noting the author's GPT-6.1 Sol (Ultra) model configuration. Keep the Markdown description, Marketplace HTML, and plugin descriptor synchronized.
+
+### Validation
+
+- Pass 59 navigation assertions on each of CLion 2026.1 and 2026.2, including eight real CHI `directory` usage statements, machine/include ownership, local/parameter shadowing, ambiguous shared includes, and existing structure-field and enum navigation. Preserve the original unpaged chooser and return all 45 actual usage targets in the larger fixture.
+- Build the plugin and pass plugin-structure verification. Fully extract the distribution ZIP and nested JAR with CRC/size checks, verify Java 21 bytecode and release metadata, preserve previous release notes and all 16 file/symbol icons, and confirm no cancelled pagination classes are packaged. Check Markdown/HTML/plugin-descriptor parity and matching bilingual README structure and links.
 
 ## 1.5.0 — 2026-10-22
 

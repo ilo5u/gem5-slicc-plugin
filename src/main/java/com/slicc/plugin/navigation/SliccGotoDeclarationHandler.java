@@ -812,6 +812,11 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
                 }
                 if (!key.equals(name)) continue;
                 if (decl instanceof SliccEnumMember) continue;
+                if (decl instanceof SliccFieldDecl field && field.getParent() instanceof SliccMachineDecl) {
+                    PsiElement context = callSite != null ? callSite : skip;
+                    if (context == null || collectVisibleVariables(context).stream()
+                            .noneMatch(visible -> field.getManager().areElementsEquivalent(field, visible))) continue;
+                }
                 if (decl instanceof SliccFunctionDecl fn) {
                     if (fnCandidates == null) fnCandidates = new ArrayList<>();
                     fnCandidates.add(fn);
@@ -1336,18 +1341,20 @@ public class SliccGotoDeclarationHandler implements GotoDeclarationHandler {
             }
             cur = cur.getParent();
         }
-        if (foundMachine != null) {            collectMachineLevelFields(foundMachine, result, seenNames);
+        if (foundMachine != null) {
+            collectMachineLevelFields(foundMachine, result, seenNames);
         } else {
             // Cross-file fallback: action is in an included .sm file
             PsiFile file = fileForLookup;
             if (file != null) {
                 try {
-                    Set<PsiFile> machineFiles = SliccProtocolIndex.machineFilesContaining(file);
-                    for (PsiFile mf : machineFiles) {
-                        for (SliccMachineDecl md : SliccFileSymbols.ofType(mf, SliccMachineDecl.class)) {
-                            collectMachineLevelFields(md, result, seenNames);
-                        }
+                    PsiElement context = position;
+                    if (file != position.getContainingFile() && file.getTextLength() > 0) {
+                        PsiElement original = file.findElementAt(Math.min(position.getTextOffset(), file.getTextLength() - 1));
+                        if (original != null) context = original;
                     }
+                    SliccMachineDecl machine = new SliccFunctionNavigation.Scope(context).machine();
+                    if (machine != null) collectMachineLevelFields(machine, result, seenNames);
                 } catch (ProcessCanceledException exception) { throw exception; }
                 catch (Exception ignored) {}
             }

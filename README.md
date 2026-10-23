@@ -7,7 +7,7 @@
 Language support for `.sm` and `.slicc` files used in the
 [gem5](https://www.gem5.org) Ruby memory-subsystem cache coherence framework.
 
-Version **1.5.0** — **2026-10-22**. See [CHANGELOG.md](CHANGELOG.md) for the release notes.
+Version **1.6.0** — **2026-10-23**. See [CHANGELOG.md](CHANGELOG.md) for the release notes.
 
 ## How to Use
 
@@ -25,11 +25,11 @@ VS Code repository for its own installation and usage instructions.
 
 ## Documentation
 
-Marketplace description, features, and 1.5.0 What's New are available in [MARKETPLACE.html](MARKETPLACE.html).
+Marketplace description, features, and 1.6.0 What's New are available in [MARKETPLACE.html](MARKETPLACE.html).
 The standalone Markdown description is available in [DESCRIPTION.md](DESCRIPTION.md).
 The HTML onboarding guide is available in [GET_STARTED.html](GET_STARTED.html).
 
-The product description and 1.5.0 release notes are also synchronized into
+The product description and 1.6.0 release notes are also synchronized into
 `src/main/resources/META-INF/plugin.xml` (`<description>` and `<change-notes>`).
 Keep these copies aligned when editing the Marketplace HTML. Marketplace normally
 uses the uploaded plugin's metadata; if you have selected a permanent page-level
@@ -53,7 +53,7 @@ description override, change that setting to use `plugin.xml` again. See the
 | **Implicit action variable navigation** | `Ctrl+Click` / `Ctrl+B` on implicit `cache_entry` opens the machine's primary `AbstractCacheEntry` implementation (such as `Entry` or CHI's `CacheEntry`); `main="false"` excludes non-default entries, while omitted `main` defaults to true. Implicit `tbe` opens `TBE`. Explicit parameters and local variables take priority; missing or ambiguous types do not select unrelated declarations |
 | **External SLICC types → C++ definitions** | `Ctrl+Click` / `Ctrl+B` on a `structure` name marked `external="yes"`, or an `external_type` declaration name, opens matching reachable gem5 C++ type definitions or supported aliases. Machine-owned unqualified names prefer `gem5::ruby::<protocol>::Name`, then `gem5::ruby::Name`, without searching other protocols. Keep qualified `external_name` values exact, follow literal `Source` / `MakeInclude` entries and transitive includes, and keep unrelated Ruby roots separate. Missing definitions are errors; unavailable source context produces warnings |
 | **Action → transitions** | `Ctrl+Click` / `Ctrl+B` on an action declaration name jumps to its sole referencing transition, or opens a chooser showing transition headers and files when there are multiple matches |
-| **Structure fields / enum constants → usages** | `Ctrl+Click` / `Ctrl+B` on a structure field or enumeration constant declaration finds its actual usage statements, including reads, writes, initializers, and state/event references in transitions. Jump directly for one statement or choose among multiple statements with file/line context; preserve receiver type, inheritance, shadowing, and machine/include ownership |
+| **Machine / structure fields and enum constants → usages** | `Ctrl+Click` / `Ctrl+B` on a machine field, structure field, or enumeration constant declaration finds its actual usage statements, including reads, writes, initializers, and state/event references in transitions. Machine fields include references in functions/actions within the same machine's include closure. Match resolved declarations, respect receiver type, inheritance, shadowing, and machine/include ownership, and deduplicate by statement; jump directly for one statement or choose among multiple statements with file/line context |
 | **Enumeration default navigation** | Resolve non-string `EnumName_MemberName` defaults to the visible enumeration member, respecting the declared enum type, ownership, and unambiguous underscore matching |
 | **Generated enum/state helpers** | Recognise global `EnumName_to_string`, machine-local `MachineName_EnumName_to_string`, and state helpers such as `L1Cache_State_to_permission`. Follow gem5's generated type identifier, including external/primitive type names or `external_name`; use function-call highlighting and declaration navigation while preserving explicit functions/variables and scope |
 | **Function navigation** | Calls and separate declarations jump to the matching definition; clicking a definition name, or a declaration with no SLICC definition (including structure/external-type methods), lists concrete calling statements in functions/actions and navigates to the call's line. One statement jumps directly; multiple statements open a chooser with file/line locations. Multiline statements display on one line, capped at 160 characters with an ellipsis; override using the IDE VM option `-Dslicc.navigation.maxStatementLength=240`. Match parameter signatures and machine/include/type scopes; calls to declaration-only functions still navigate to the declaration |
@@ -295,7 +295,7 @@ If Gradle cannot find the Java toolchain required by that IDE, point
 ```bash
 # Build the distributable plugin ZIP
 ./gradlew buildPlugin
-# Output: build/distributions/slicc-plugin-1.5.0.zip
+# Output: build/distributions/slicc-plugin-1.6.0.zip
 
 # Launch a sandboxed IDE with the plugin loaded (primary way to test)
 ./gradlew runIde
@@ -306,7 +306,7 @@ If Gradle cannot find the Java toolchain required by that IDE, point
 ## Installing in CLion / IntelliJ IDEA
 
 1. Go to **Settings → Plugins → ⚙ → Install Plugin from Disk…**
-2. Select `build/distributions/slicc-plugin-1.5.0.zip`
+2. Select `build/distributions/slicc-plugin-1.6.0.zip`
 3. Restart the IDE
 4. Open any `.sm` or `.slicc` file — highlighting activates immediately
 

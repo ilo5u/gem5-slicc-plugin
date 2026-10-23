@@ -7,7 +7,7 @@
 为 [gem5](https://www.gem5.org) Ruby 内存子系统缓存一致性框架中使用的
 `.sm` 和 `.slicc` 文件提供语言支持。
 
-版本 **1.5.0** — **2026-10-22**。发布说明见 [CHANGELOG.md](CHANGELOG.md)。
+版本 **1.6.0** — **2026-10-23**。发布说明见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 使用方法
 
@@ -25,11 +25,11 @@
 
 ## 文档
 
-插件市场介绍、功能列表和 1.5.0 更新内容见 [MARKETPLACE.html](MARKETPLACE.html)。
+插件市场介绍、功能列表和 1.6.0 更新内容见 [MARKETPLACE.html](MARKETPLACE.html)。
 独立的 Markdown 版介绍见 [DESCRIPTION.md](DESCRIPTION.md)。
 HTML 入门指南见 [GET_STARTED.html](GET_STARTED.html)。
 
-产品介绍和 1.5.0 发布说明也同步在
+产品介绍和 1.6.0 发布说明也同步在
 `src/main/resources/META-INF/plugin.xml` 中，分别对应 `<description>` 和 `<change-notes>`。
 修改插件市场 HTML 时，请保持这些副本一致。插件市场通常使用上传插件中的元数据；
 如果此前启用了永久的页面级介绍覆盖，请调整该设置，重新使用 `plugin.xml`。
@@ -52,7 +52,7 @@ HTML 入门指南见 [GET_STARTED.html](GET_STARTED.html)。
 | **Action 隐式变量导航** | 对隐式 `cache_entry` 使用 `Ctrl+Click` / `Ctrl+B`，跳转到 machine 中主要的 `AbstractCacheEntry` 实现（如 `Entry` 或 CHI 的 `CacheEntry`）；`main="false"` 排除非默认条目，省略 `main` 时默认为 true。隐式 `tbe` 跳转到 `TBE`。显式参数和局部变量优先；类型缺失或存在歧义时，不会选择无关声明 |
 | **外部 SLICC 类型 → C++ 定义** | 在标记为 `external="yes"` 的 `structure` 名称或 `external_type` 声明名称上使用 `Ctrl+Click` / `Ctrl+B`，打开可达 gem5 C++ 类型定义或支持的别名。machine 所属的非限定名称优先匹配 `gem5::ruby::<protocol>::Name`，然后匹配 `gem5::ruby::Name`，不会搜索其他协议。保持限定 `external_name` 的精确匹配，沿字面量 `Source` / `MakeInclude` 条目和传递 include 查找，并隔离无关的 Ruby 根目录。定义缺失时报错；源码上下文不可用时给出警告 |
 | **Action → transitions** | 在 action 声明名上使用 `Ctrl+Click` / `Ctrl+B`，如果仅有一处引用则直接跳转；如果有多个匹配，则显示包含 transition 头部与文件的选择列表 |
-| **结构体字段 / 枚举常量 → 使用位置** | 在结构体字段或枚举常量声明上使用 `Ctrl+Click` / `Ctrl+B`，查找实际使用语句，包括读取、写入、初始化，以及 transition 中的 state/event 引用。只有一条语句时直接跳转；多条时显示带文件/行号上下文的选择列表；保持接收者类型、继承、遮蔽和 machine/include 归属关系 |
+| **machine / 结构体字段和枚举常量 → 使用位置** | 在 machine 字段、结构体字段或枚举常量声明上使用 `Ctrl+Click` / `Ctrl+B`，查找实际使用语句，包括读取、写入、初始化，以及 transition 中的 state/event 引用。machine 字段包含同一 machine 的 include 闭包内函数/action 中的引用。按解析后的声明匹配，遵循接收者类型、继承、遮蔽和 machine/include 归属关系，并按语句去重；只有一条语句时直接跳转，多条时显示带文件/行号上下文的选择列表 |
 | **枚举默认值导航** | 将非字符串形式的 `EnumName_MemberName` 默认值解析到可见枚举成员，遵循声明的枚举类型、归属关系和无歧义的下划线匹配 |
 | **自动生成的枚举/状态辅助函数** | 识别全局 `EnumName_to_string`、machine 局部的 `MachineName_EnumName_to_string`，以及 `L1Cache_State_to_permission` 等状态辅助函数。遵循 gem5 生成的类型标识符，包括 external/primitive 类型名称或 `external_name`；提供函数调用高亮和声明导航，同时保留显式函数/变量及作用域的优先级 |
 | **函数导航** | 调用和独立声明跳转到匹配的定义；在定义名或不存在 SLICC 定义的声明名（包括 structure/external-type 方法）上点击时，列出函数/action 中的具体调用语句，并跳转到调用所在行。一条语句时直接跳转；多条时显示带文件/行号的选择列表。多行语句压缩为单行展示，默认最多 160 个字符并带省略号；可通过 IDE VM 选项 `-Dslicc.navigation.maxStatementLength=240` 调整。按参数签名和 machine/include/type 作用域匹配；仅有声明的函数调用仍跳转到其声明 |
@@ -277,7 +277,7 @@ IDE 解压在 Gradle 缓存的深层路径中时，可能超出 Windows 路径�
 ```bash
 # 构建可分发的插件 ZIP
 ./gradlew buildPlugin
-# 输出：build/distributions/slicc-plugin-1.5.0.zip
+# 输出：build/distributions/slicc-plugin-1.6.0.zip
 
 # 启动加载了插件的沙盒 IDE（主要测试方式）
 ./gradlew runIde
@@ -288,7 +288,7 @@ IDE 解压在 Gradle 缓存的深层路径中时，可能超出 Windows 路径�
 ## 在 CLion / IntelliJ IDEA 中安装
 
 1. 打开 **Settings → Plugins → ⚙ → Install Plugin from Disk…**
-2. 选择 `build/distributions/slicc-plugin-1.5.0.zip`
+2. 选择 `build/distributions/slicc-plugin-1.6.0.zip`
 3. 重新启动 IDE
 4. 打开任意 `.sm` 或 `.slicc` 文件，高亮会立即启用
 

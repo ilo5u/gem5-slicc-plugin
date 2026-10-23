@@ -1,6 +1,7 @@
 package com.slicc.plugin.navigation;
 
 import com.intellij.openapi.progress.ProgressManager;
+import com.intellij.openapi.project.DumbService;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiManager;
@@ -19,15 +20,23 @@ public final class SliccMemberNavigation {
 
     public static boolean supports(SliccNamedElement declaration) {
         return declaration instanceof SliccEnumMember
-                || declaration instanceof SliccFieldDecl && declaration.getParent() instanceof SliccStructureDecl;
+                || declaration instanceof SliccFieldDecl
+                && (declaration.getParent() instanceof SliccStructureDecl
+                || declaration.getParent() instanceof SliccMachineDecl);
     }
 
     @NotNull
     public static SliccUsageSite[] findUsages(@NotNull SliccNamedElement declaration) {
         String name = declaration.getName();
-        if (!supports(declaration) || name == null) return new SliccUsageSite[0];
-        Set<PsiFile> files = new LinkedHashSet<>(new SliccFunctionNavigation.Scope(declaration).files);
-        files.addAll(SliccProtocolIndex.allProjectFiles(declaration.getProject()));
+        if (!supports(declaration) || name == null || DumbService.isDumb(declaration.getProject())) {
+            return new SliccUsageSite[0];
+        }
+        SliccFunctionNavigation.Scope scope = new SliccFunctionNavigation.Scope(declaration);
+        Set<PsiFile> files = declaration.getParent() instanceof SliccMachineDecl machine
+                ? scope.machineFiles(machine) : new LinkedHashSet<>(scope.files);
+        if (!(declaration.getParent() instanceof SliccMachineDecl)) {
+            files.addAll(SliccProtocolIndex.allProjectFiles(declaration.getProject()));
+        }
         Set<PsiElement> statements = new LinkedHashSet<>();
         List<SliccUsageSite> usages = new ArrayList<>();
         PsiManager manager = declaration.getManager();

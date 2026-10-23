@@ -180,16 +180,27 @@ public final class SliccFunctionNavigation {
                     Set<PsiFile> included = new LinkedHashSet<>();
                     for (SliccIncludeDecl include : PsiTreeUtil.collectElementsOfType(candidate, SliccIncludeDecl.class)) {
                         SliccMachineDecl owner = PsiTreeUtil.getParentOfType(include, SliccMachineDecl.class);
-                        if (owner != null && !equivalent(machine, owner)) continue;
+                        if (owner == null || !equivalent(machine, owner)) continue;
                         String path = include.getIncludedPath();
                         PsiFile target = path == null ? null : SliccProtocolIndex.resolveRelative(candidate, path);
-                        if (target != null) SliccProtocolIndex.collectFromFile(target, included, new HashSet<>());
+                        if (target != null) collectMachineIncludes(target, included);
                     }
                     for (PsiFile includedFile : included) {
                         machines.computeIfAbsent(includedFile, unused -> new LinkedHashSet<>()).add(machine);
                     }
                     files.addAll(included);
                 }
+            }
+        }
+
+        private static void collectMachineIncludes(PsiFile file, Set<PsiFile> included) {
+            ProgressManager.checkCanceled();
+            if (!included.add(file)) return;
+            for (SliccIncludeDecl include : PsiTreeUtil.collectElementsOfType(file, SliccIncludeDecl.class)) {
+                if (PsiTreeUtil.getParentOfType(include, SliccMachineDecl.class) != null) continue;
+                String path = include.getIncludedPath();
+                PsiFile target = path == null ? null : SliccProtocolIndex.resolveRelative(file, path);
+                if (target != null) collectMachineIncludes(target, included);
             }
         }
 
@@ -256,6 +267,23 @@ public final class SliccFunctionNavigation {
 
         boolean hasAmbiguousOwners() {
             return owners(context).size() > 1;
+        }
+
+        @Nullable
+        SliccMachineDecl machine() {
+            Set<SliccMachineDecl> candidates = owners(context);
+            return candidates.size() == 1 ? candidates.iterator().next() : null;
+        }
+
+        Set<PsiFile> machineFiles(SliccMachineDecl machine) {
+            Set<PsiFile> result = new LinkedHashSet<>();
+            result.add(machine.getContainingFile());
+            for (PsiFile file : files) {
+                if (machines.getOrDefault(file, Set.of()).stream().anyMatch(owner -> equivalent(owner, machine))) {
+                    result.add(file);
+                }
+            }
+            return result;
         }
 
         @Nullable

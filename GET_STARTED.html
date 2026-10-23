@@ -1,5 +1,5 @@
 <h2>Get Started with SLICC / gem5 Ruby Language Support</h2>
-<p>Edit and explore gem5 Ruby cache-coherence protocols in CLion or IntelliJ IDEA. This plugin supports <code>.sm</code> and <code>.slicc</code> files; it is not a plugin for the Ruby programming language. The features described below are included in plugin version <strong>1.5.0</strong>, prepared on <strong>2026-10-22</strong>.</p>
+<p>Edit and explore gem5 Ruby cache-coherence protocols in CLion or IntelliJ IDEA. This plugin supports <code>.sm</code> and <code>.slicc</code> files; it is not a plugin for the Ruby programming language. The features described below are included in plugin version <strong>1.6.0</strong>, prepared on <strong>2026-10-23</strong>.</p>
 
 <h3>1. Install the Plugin</h3>
 <ol>
@@ -7,7 +7,7 @@
   <li>Search for <strong>SLICC / gem5 Ruby Language Support</strong> and install an available version compatible with your IDE.</li>
   <li>Restart the IDE if prompted.</li>
 </ol>
-<p>If you are testing a release that is not yet available on Marketplace, install its distribution ZIP using <strong>Settings → Plugins → Settings menu → Install Plugin from Disk</strong>. For a local 1.5.0 build, select <code>build/distributions/slicc-plugin-1.5.0.zip</code>. Select the plugin ZIP itself, not a source-code archive; do not extract it first.</p>
+<p>If you are testing a release that is not yet available on Marketplace, install its distribution ZIP using <strong>Settings → Plugins → Settings menu → Install Plugin from Disk</strong>. For a local 1.6.0 build, select <code>build/distributions/slicc-plugin-1.6.0.zip</code>. Select the plugin ZIP itself, not a source-code archive; do not extract it first.</p>
 <p>Version 1.5.0 recognises all 30 gem5 SLICC reserved words, including <code>global</code>, <code>wakeup_port</code>, <code>check_next_cycle</code>, <code>check_stop_slots</code>, <code>check_on_cache_probe</code>, <code>defer_enqueueing</code>, and uppercase <code>OOD</code>. Attribute keywords <code>in_trans</code>, <code>out_trans</code>, and <code>main</code> work alongside <code>interface</code> and <code>desc</code>. Keywords are case-sensitive; use completion to discover them.</p>
 <p>For the IDE's installation instructions, see <a href="https://www.jetbrains.com/help/idea/managing-plugins.html">Install and manage plugins</a>.</p>
 
@@ -38,7 +38,7 @@
   <li><strong>Function definition → calling statements:</strong> select the function's definition name to find its calls inside functions and actions.</li>
   <li><strong>Declaration-only method → calling statements:</strong> select a method name in a <code>structure</code> or <code>external_type</code> declaration when no SLICC implementation exists. Free functions without definitions support this too.</li>
   <li><strong>Implicit action variable → type:</strong> use <code>Ctrl+B</code> or <code>Ctrl+Click</code> on implicit <code>cache_entry</code> inside an action to open the machine's primary <code>AbstractCacheEntry</code> implementation, such as <code>Entry</code> or CHI's <code>CacheEntry</code>. Omitted <code>main</code> defaults to true; <code>main="false"</code> excludes non-default types such as <code>DirEntry</code>. Implicit <code>tbe</code> opens <code>TBE</code>. Explicit function parameters and local variables take priority, and unrelated machine/include types are not selected.</li>
-  <li><strong>Structure field → usage statements:</strong> select a field's declaration name in a <code>structure</code> to find reads, writes, and initializer uses. Matching follows the receiver's type and supported inheritance, and respects parameter/local shadowing.</li>
+  <li><strong>Machine / structure field → usage statements:</strong> select a field's declaration name in a <code>machine</code> or <code>structure</code> to find reads, writes, and initializer uses. Machine fields include references in functions/actions within the same machine's include closure. Matching follows resolved declaration identity, the receiver's type, and supported inheritance, respects parameter/local shadowing, and deduplicates by statement.</li>
   <li><strong>Enum constant → usage statements:</strong> select a constant name in an <code>enumeration</code> or <code>state_declaration</code> to find its uses, including qualified constants and transition state/event references. Same-named constants from unrelated enums or machines are kept separate.</li>
 </ul>
 <p>A single matching target opens directly. Multiple targets open a chooser. Function-call and member-usage candidates show the complete statement on one line with context, file, and line information; selecting one opens the actual identifier location. Distinct statements remain separate, while repeated uses within one statement share a candidate. Matching respects overload signatures and machine/include/type ownership.</p>
